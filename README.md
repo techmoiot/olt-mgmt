@@ -26,6 +26,16 @@ API (FastAPI) -> services (locks por OLT, auditoría) -> adaptador por marca -> 
 Servidor (LXC) ==WireGuard== MikroTik --VLAN de gestión--> OLT      (si no están conectados directo)
 ```
 
+## Instalar en el LXC (Debian 12 / Ubuntu 22.04+)
+
+Como root dentro del LXC, un solo comando. La primera vez instala; las siguientes **actualiza**:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/techmoiot/olt-mgmt/main/install.sh | bash
+```
+
+Instala lo que falte (git, python3-venv), crea el usuario `oltmgmt`, el código en `/opt/olt-mgmt`, los datos en `/var/lib/olt-mgmt`, la configuración en `/etc/olt-mgmt.env` (nunca la sobrescribe) y el servicio `olt-mgmt`, y comprueba que responde. Por defecto escucha solo en `127.0.0.1:8000` porque la API aún no tiene login; abre la pantalla web con un túnel SSH (`ssh -L 8000:127.0.0.1:8000 root@IP`). Variables opcionales: `OLT_REPO`, `OLT_BRANCH`, `OLT_DIR`, `OLT_DATA`, `OLT_ENV`, `OLT_BIND`, `OLT_PORT`. Si el repositorio es privado, `raw.githubusercontent.com` y `git clone` necesitan un token o una deploy key.
+
 ## Ejecutar en desarrollo
 
 ```bash
@@ -108,4 +118,4 @@ Los backups de OLT (`*.cfg`) traen hashes de contraseñas y datos de clientes: e
 - Autenticación en la API (hoy está abierta; no hay usuarios ni tokens).
 - Migraciones con Alembic (hoy las tablas se crean al arrancar).
 - Escaneo periódico automático y pantalla web de autorización de ONUs.
-- Servicio systemd y PostgreSQL para el LXC.
+- PostgreSQL para producción (hoy se usa SQLite en `/var/lib/olt-mgmt`).
