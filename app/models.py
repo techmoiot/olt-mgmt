@@ -122,3 +122,32 @@ class AuditLog(Base):
     olt_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     onu_serial: Mapped[str] = mapped_column(String(40), default="")
     detail: Mapped[str] = mapped_column(Text, default="")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(32), unique=True)  # siempre en minúsculas
+    password_hash: Mapped[str] = mapped_column(String(255))          # scrypt, nunca la contraseña
+    role: Mapped[str] = mapped_column(String(10), default="operator")  # admin | operator
+    active: Mapped[bool] = mapped_column(default=True)
+    must_change_password: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class UserSession(Base):
+    """Sesión de login. Solo se guarda el hash del token: si alguien leyera la base no podría usarlo."""
+
+    __tablename__ = "user_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    csrf_token: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    ip: Mapped[str] = mapped_column(String(45), default="")
+    user_agent: Mapped[str] = mapped_column(String(200), default="")

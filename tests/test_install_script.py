@@ -41,3 +41,9 @@ def test_install_script_validates_bind_and_port_before_saving_them():
 def test_install_script_never_overwrites_existing_config():
     text = SCRIPT.read_text()
     assert 'if [ ! -f "$ENV_FILE" ]' in text
+
+
+def test_install_script_creates_first_admin_and_user_command():
+    text = SCRIPT.read_text()
+    assert "manage_users.py\" bootstrap" in text and "ritsuko-user" in text
+    assert "no se vuelve a mostrar" in text

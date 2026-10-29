@@ -1,7 +1,7 @@
 import re
 import socket
 
-from fastapi.testclient import TestClient
+from tests.helpers import AuthedClient
 
 from app.adapters.mock import mock_add_unauthorized
 from app.db import SessionLocal
@@ -9,7 +9,7 @@ from app.main import app
 from app.models import Olt
 from app.vault import decrypt
 
-client = TestClient(app)
+client = AuthedClient(app)
 
 MK = {
     "system_ip": "192.168.88.50",

@@ -14,6 +14,7 @@ Sistema de autorización y gestión de ONUs para OLTs de varias marcas (TP-Link,
 | Adaptador TP-Link DS-P7001-08 | Conexión SSH lista; comandos pendientes de salidas reales de la CLI |
 | Adaptadores ZTE, VSOL, BTPON | Pendientes |
 | Pantalla web: alta de OLTs, MikroTik/VPN, scripts | Listo (`/`) |
+| Login (usuarios, roles admin/operador, sesiones, CSRF) | Listo |
 | Pantalla web de autorización de ONUs | Pendiente |
 
 ## Arquitectura
@@ -42,7 +43,7 @@ ritsuko-update
 
 (Trae el código nuevo y vuelve a correr el instalador ya actualizado; conserva tu configuración. También puedes volver a pegar el `curl`.)
 
-Instala lo que falte (git, python3-venv), crea el usuario `oltmgmt`, el código en `/opt/olt-mgmt`, los datos en `/var/lib/olt-mgmt`, la configuración en `/etc/olt-mgmt.env` (nunca la sobrescribe) y el servicio `olt-mgmt`, y comprueba que responde. **Cómo abrir la pantalla web.** Por defecto escucha solo en `127.0.0.1:8000`, porque la API aún no tiene login y quien llegue a ese puerto puede operar tus OLTs. Dos opciones:
+Instala lo que falte (git, python3-venv), crea el usuario `oltmgmt`, el código en `/opt/olt-mgmt`, los datos en `/var/lib/olt-mgmt`, la configuración en `/etc/olt-mgmt.env` (nunca la sobrescribe) y el servicio `olt-mgmt`, y comprueba que responde. **Cómo abrir la pantalla web.** Por defecto escucha solo en `127.0.0.1:8000`. Hay login, pero va por HTTP sin cifrar (las contraseñas viajan en claro), así que úsalo en una red de confianza. Dos opciones:
 
 - **Túnel SSH (recomendado):** `ssh -L 8000:127.0.0.1:8000 root@IP_DEL_LXC` y abre `http://localhost:8000`.
 - **Directo por la IP del LXC** (`http://IP_DEL_LXC:8000`), solo en una red de gestión de confianza o con firewall:
@@ -53,6 +54,16 @@ Instala lo que falte (git, python3-venv), crea el usuario `oltmgmt`, el código 
 
 Otras variables opcionales: `OLT_REPO`, `OLT_BRANCH`, `OLT_DIR`, `OLT_DATA`, `OLT_ENV`, `OLT_PORT`, `OLT_CMD` (dónde se crea `ritsuko-update`). Si el repositorio es privado, `raw.githubusercontent.com` y `git clone` necesitan un token o una deploy key.
 
+## Login y usuarios
+
+Todo exige iniciar sesión salvo la página de ingreso y `/health` (si se agrega una ruta nueva queda cerrada por defecto).
+
+- **Primer ingreso:** al terminar la instalación se imprime una vez el usuario `admin` y una contraseña aleatoria. Al entrar, el sistema te obliga a cambiarla. Si la pierdes: `ritsuko-user reset admin --generate`.
+- **Roles:** *administrador* (todo, incluidos OLTs, MikroTik/VPN, planes, usuarios y auditoría) y *operador* (ver OLTs, escanear, autorizar/suspender/reactivar ONUs).
+- **Usuarios:** desde la web (sección *Usuarios*, solo admin) o en el servidor: `ritsuko-user list | create NOMBRE --role admin|operator | reset NOMBRE | deactivate NOMBRE | activate NOMBRE`.
+- **Seguridad:** contraseñas con scrypt (mín. 10 caracteres); cookie `HttpOnly` + `SameSite=Strict`, token CSRF en cada cambio, sesión de 12 h con cierre a las 2 h sin actividad, bloqueo de 5 min tras 5 intentos fallidos, y cada acción queda en la auditoría con el usuario real.
+- **HTTPS:** el login solo protege el acceso; sin HTTPS las contraseñas viajan en claro. Si lo pones detrás de un proxy con HTTPS, agrega `ONU_COOKIE_SECURE=true` en `/etc/olt-mgmt.env`. Las sesiones y bloqueos se reinician si cambias a varios procesos (hoy corre uno).
+
 ## Ejecutar en desarrollo
 
 ```bash
@@ -61,6 +72,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 # Pantalla web: http://localhost:8000/    Documentación de la API: http://localhost:8000/docs
 pytest
+# crear tu usuario local:  python tools/manage_users.py create admin --role admin
 ```
 
 Configuración por variables de entorno (prefijo `ONU_`), por ejemplo en `.env`:
@@ -132,7 +144,7 @@ Los backups de OLT (`*.cfg`) traen hashes de contraseñas y datos de clientes: e
 
 ## Pendiente antes de producción
 
-- Autenticación en la API (hoy está abierta; no hay usuarios ni tokens).
+- HTTPS delante de la pantalla web (proxy inverso) y, opcionalmente, 2FA.
 - Migraciones con Alembic (hoy las tablas se crean al arrancar).
 - Escaneo periódico automático y pantalla web de autorización de ONUs.
 - PostgreSQL para producción (hoy se usa SQLite en `/var/lib/olt-mgmt`).

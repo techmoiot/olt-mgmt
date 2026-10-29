@@ -141,6 +141,25 @@ EOF
   valid_ipv4 "$BIND" || die "OLT_BIND en $ENV_FILE no es una IPv4 válida: '$BIND'"
   valid_port "$PORT" || die "OLT_PORT en $ENV_FILE no es un puerto válido: '$PORT'"
 
+  # Comando para administrar usuarios: ritsuko-user create|reset|list|activate|deactivate ...
+  local UCMD; UCMD="$(dirname "$CMD")/ritsuko-user"
+  {
+    echo '#!/usr/bin/env bash'
+    echo '# Administra los usuarios de Ritsuko. Generado por install.sh: no lo edites a mano.'
+    echo '[ "$(id -u)" -eq 0 ] || { echo "Ejecútalo como root:  sudo ritsuko-user ..." >&2; exit 1; }'
+    printf 'ENV_FILE=%q; APP_DIR=%q; SVC_USER=%q\n' "$ENV_FILE" "$APP_DIR" "$SVC_USER"
+    echo 'set -a; . "$ENV_FILE"; set +a'
+    echo 'cd "$APP_DIR"'
+    echo 'exec runuser -u "$SVC_USER" -- "$APP_DIR/.venv/bin/python" -I "$APP_DIR/tools/manage_users.py" "$@"'
+  } > "$UCMD"
+  chmod 755 "$UCMD"
+
+  # Primer administrador: solo si todavía no hay ningún usuario. La contraseña es aleatoria y se muestra una vez.
+  local boot_out=""
+  boot_out="$(set -a; . "$ENV_FILE"; set +a; cd "$APP_DIR" \
+    && runuser -u "$SVC_USER" -- "$APP_DIR/.venv/bin/python" "$APP_DIR/tools/manage_users.py" bootstrap </dev/null)" \
+    || die "No se pudo preparar el usuario inicial. Revisa los permisos de $DATA_DIR"
+
   # 6) Servicio systemd
   local started=0
   if [ -d /run/systemd/system ]; then
@@ -191,20 +210,28 @@ EOF
     say "Listo (versión $version)."
   fi
 
+  if [ -n "$boot_out" ]; then
+    echo
+    echo "=============== PRIMER INGRESO ==============="
+    echo "$boot_out"
+    echo "Anótala ahora: no se vuelve a mostrar. Si la pierdes:  ritsuko-user reset admin --generate"
+    echo "=============================================="
+  fi
   echo
   echo "Siguientes pasos"
   if [ "$BIND" = "127.0.0.1" ]; then
     echo "  - Escucha solo dentro del LXC (127.0.0.1). Para abrir la pantalla web desde tu PC, con un túnel SSH:"
     echo "      ssh -L $PORT:127.0.0.1:$PORT root@IP_DEL_LXC     y luego     http://localhost:$PORT"
     echo "  - Para abrirla directo por la IP del LXC (http://IP_DEL_LXC:$PORT), vuelve a correr con OLT_BIND=0.0.0.0"
-    echo "    (solo si esa red es de confianza: la API aún no tiene login)."
+    echo "    (la pantalla pide usuario y contraseña, pero usa HTTP sin cifrar: solo en una red de confianza)."
   else
     echo "  - Abre la pantalla web en  http://IP_DEL_LXC:$PORT   (escucha en $BIND)"
-    echo "  - ATENCIÓN: la API aún no tiene login; cualquiera que llegue a ese puerto puede operar tus OLTs."
-    echo "    Déjala solo en una red de gestión de confianza o limita el acceso con el firewall."
+    echo "  - ATENCIÓN: el acceso usa HTTP sin cifrar; las contraseñas viajan en claro. Úsalo solo en una red de gestión"
+    echo "    de confianza o pon Ritsuko detrás de HTTPS (y activa ONU_COOKIE_SECURE=true en $ENV_FILE)."
   fi
   echo "  - Respalda la clave de cifrado (se crea al guardar la primera contraseña): $DATA_DIR/secret.key"
   echo "    Sin ella no se pueden recuperar las contraseñas ni claves guardadas."
+  echo "  - Usuarios:  ritsuko-user list | create NOMBRE --role admin|operator | reset NOMBRE --generate"
   echo "  - Para actualizar más adelante, escribe en este servidor:   ritsuko-update   (conserva tu configuración)"
 }
 

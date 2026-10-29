@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
-from fastapi.testclient import TestClient
+from tests.helpers import AuthedClient
 
 from app import vpn
 from app.adapters.base import InvalidRequest
@@ -17,7 +17,7 @@ from app.main import app
 from app.models import Gateway
 from app.vault import decrypt
 
-client = TestClient(app)
+client = AuthedClient(app)
 ROOT = Path(__file__).resolve().parent.parent
 
 

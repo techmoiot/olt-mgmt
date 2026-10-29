@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     # IMPORTANTE: respáldala aparte; sin ella no se pueden descifrar los datos guardados.
     secret_key: str = ""
     secret_key_file: str = "./secret.key"
+    # Sesiones de usuario: duración máxima y tiempo sin actividad antes de pedir login otra vez.
+    session_hours: int = 12
+    session_idle_minutes: int = 120
+    # Marca la cookie de sesión como "Secure" (solo HTTPS). Actívalo si pones Ritsuko detrás de HTTPS;
+    # con HTTPS directo (esquema https) se marca sola. Con HTTP plano debe quedar en False o el
+    # navegador no la guardará.
+    cookie_secure: bool = False
 
 
 settings = Settings()

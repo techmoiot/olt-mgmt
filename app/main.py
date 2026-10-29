@@ -3,10 +3,13 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import schemas, services, vpn
+from . import auth, schemas, services, vpn
+from .auth import AuthUser, current_user, require_admin
+from .auth_routes import router as auth_router
 from .adapters import ADAPTERS
 from .adapters.base import AdapterError, InvalidRequest
 from .config import settings
@@ -17,6 +20,11 @@ from .vault import VaultError, encrypt
 Base.metadata.create_all(engine)
 
 app = FastAPI(title="Ritsuko", version="0.1.0")
+# Denegar por defecto: toda ruta que no esté en auth.PUBLIC_PATHS exige sesión.
+app.middleware("http")(auth.auth_middleware)
+app.include_router(auth_router)
+STATIC = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 def _vendors() -> list[str]:
@@ -32,7 +40,7 @@ def _olt_or_404(db: Session, olt_id: int) -> Olt:
 
 @app.get("/", include_in_schema=False)
 def ui():
-    return FileResponse(Path(__file__).parent / "static" / "index.html")
+    return FileResponse(STATIC / "index.html")
 
 
 def _onu_or_404(db: Session, onu_id: int) -> Onu:
@@ -62,7 +70,7 @@ def health():
 
 
 # ---- OLTs -------------------------------------------------------------------
-@app.post("/olts", response_model=schemas.OltOut, status_code=201)
+@app.post("/olts", response_model=schemas.OltOut, status_code=201, dependencies=[Depends(require_admin)])
 def create_olt(body: schemas.OltCreate, db: Session = Depends(get_db)):
     if body.vendor not in ADAPTERS:
         raise HTTPException(400, f"Marca {body.vendor!r} sin adaptador. Disponibles: {', '.join(_vendors())}")
@@ -90,19 +98,19 @@ def create_olt(body: schemas.OltCreate, db: Session = Depends(get_db)):
     return olt
 
 
-@app.get("/vendors", response_model=list[str])
+@app.get("/vendors", response_model=list[str], dependencies=[Depends(current_user)])
 def vendors():
     """Marcas con adaptador disponible para el formulario de alta."""
     return _vendors()
 
 
-@app.post("/olts/{olt_id}/test", response_model=schemas.ReachabilityOut)
+@app.post("/olts/{olt_id}/test", response_model=schemas.ReachabilityOut, dependencies=[Depends(require_admin)])
 def test_olt(olt_id: int, db: Session = Depends(get_db)):
     olt = _olt_or_404(db, olt_id)
     return services.check_olt_reachable(olt)
 
 
-@app.delete("/olts/{olt_id}", status_code=204)
+@app.delete("/olts/{olt_id}", status_code=204, dependencies=[Depends(require_admin)])
 def delete_olt(olt_id: int, db: Session = Depends(get_db)):
     """Quita la OLT del sistema. No toca la OLT física."""
     olt = _olt_or_404(db, olt_id)
@@ -116,7 +124,7 @@ def delete_olt(olt_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
-@app.post("/olts/{olt_id}/mikrotik-script", response_model=schemas.ScriptOut)
+@app.post("/olts/{olt_id}/mikrotik-script", response_model=schemas.ScriptOut, dependencies=[Depends(require_admin)])
 def olt_mikrotik_script(olt_id: int, body: schemas.MikrotikScriptIn, db: Session = Depends(get_db)):
     """Genera (no ejecuta) el script de RouterOS (VLAN de gestión + firewall) para esta OLT."""
     olt = _olt_or_404(db, olt_id)
@@ -132,7 +140,7 @@ def _gateway_or_404(db: Session, gateway_id: int) -> Gateway:
     return gw
 
 
-@app.post("/gateways", response_model=schemas.GatewayOut, status_code=201)
+@app.post("/gateways", response_model=schemas.GatewayOut, status_code=201, dependencies=[Depends(require_admin)])
 def create_gateway(body: schemas.GatewayCreate, db: Session = Depends(get_db)):
     """Registra un MikroTik y genera el par de claves WireGuard del servidor (la privada queda cifrada)."""
     if db.scalar(select(Gateway).where(Gateway.name == body.name)):
@@ -155,12 +163,12 @@ def create_gateway(body: schemas.GatewayCreate, db: Session = Depends(get_db)):
     return gw
 
 
-@app.get("/gateways", response_model=list[schemas.GatewayOut])
+@app.get("/gateways", response_model=list[schemas.GatewayOut], dependencies=[Depends(require_admin)])
 def list_gateways(db: Session = Depends(get_db)):
     return db.scalars(select(Gateway)).all()
 
 
-@app.post("/gateways/{gateway_id}/vpn-script", response_model=schemas.ScriptOut)
+@app.post("/gateways/{gateway_id}/vpn-script", response_model=schemas.ScriptOut, dependencies=[Depends(require_admin)])
 def gateway_vpn_script(gateway_id: int, body: schemas.VpnScriptIn, db: Session = Depends(get_db)):
     """Genera (no ejecuta) el script de RouterOS que arma el lado MikroTik de la VPN WireGuard."""
     gw = _gateway_or_404(db, gateway_id)
@@ -169,7 +177,7 @@ def gateway_vpn_script(gateway_id: int, body: schemas.VpnScriptIn, db: Session =
     return {"script": script, "notes": notes}
 
 
-@app.put("/gateways/{gateway_id}/router-key", response_model=schemas.GatewayOut)
+@app.put("/gateways/{gateway_id}/router-key", response_model=schemas.GatewayOut, dependencies=[Depends(require_admin)])
 def set_router_key(gateway_id: int, body: schemas.RouterKeyIn, db: Session = Depends(get_db)):
     """Guarda la clave pública que imprimió el script en el MikroTik."""
     gw = _gateway_or_404(db, gateway_id)
@@ -179,7 +187,7 @@ def set_router_key(gateway_id: int, body: schemas.RouterKeyIn, db: Session = Dep
     return gw
 
 
-@app.delete("/gateways/{gateway_id}", status_code=204)
+@app.delete("/gateways/{gateway_id}", status_code=204, dependencies=[Depends(require_admin)])
 def delete_gateway(gateway_id: int, db: Session = Depends(get_db)):
     gw = _gateway_or_404(db, gateway_id)
     if gw.olts:
@@ -189,12 +197,12 @@ def delete_gateway(gateway_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
-@app.get("/olts", response_model=list[schemas.OltOut])
+@app.get("/olts", response_model=list[schemas.OltOut], dependencies=[Depends(current_user)])
 def list_olts(db: Session = Depends(get_db)):
     return db.scalars(select(Olt)).all()
 
 
-@app.post("/olts/{olt_id}/scan", response_model=list[schemas.OnuOut])
+@app.post("/olts/{olt_id}/scan", response_model=list[schemas.OnuOut], dependencies=[Depends(current_user)])
 def scan(olt_id: int, db: Session = Depends(get_db)):
     olt = db.get(Olt, olt_id)
     if olt is None:
@@ -202,7 +210,7 @@ def scan(olt_id: int, db: Session = Depends(get_db)):
     return _run(services.scan_olt, db, olt)
 
 
-@app.get("/olts/{olt_id}/vlans", response_model=list[int])
+@app.get("/olts/{olt_id}/vlans", response_model=list[int], dependencies=[Depends(current_user)])
 def olt_vlans(olt_id: int, db: Session = Depends(get_db)):
     """VLANs disponibles en la OLT, para el selector al autorizar."""
     olt = db.get(Olt, olt_id)
@@ -212,7 +220,7 @@ def olt_vlans(olt_id: int, db: Session = Depends(get_db)):
 
 
 # ---- Planes de velocidad ----------------------------------------------------
-@app.post("/speed-plans", response_model=schemas.SpeedPlanOut, status_code=201)
+@app.post("/speed-plans", response_model=schemas.SpeedPlanOut, status_code=201, dependencies=[Depends(require_admin)])
 def create_speed_plan(body: schemas.SpeedPlanCreate, db: Session = Depends(get_db)):
     if db.scalar(select(SpeedPlan).where(SpeedPlan.name == body.name)):
         raise HTTPException(409, f"Ya existe un plan llamado {body.name!r}")
@@ -222,13 +230,13 @@ def create_speed_plan(body: schemas.SpeedPlanCreate, db: Session = Depends(get_d
     return plan
 
 
-@app.get("/speed-plans", response_model=list[schemas.SpeedPlanOut])
+@app.get("/speed-plans", response_model=list[schemas.SpeedPlanOut], dependencies=[Depends(current_user)])
 def list_speed_plans(db: Session = Depends(get_db)):
     return db.scalars(select(SpeedPlan)).all()
 
 
 # ---- ONUs -------------------------------------------------------------------
-@app.get("/onus", response_model=list[schemas.OnuOut])
+@app.get("/onus", response_model=list[schemas.OnuOut], dependencies=[Depends(current_user)])
 def list_onus(status: OnuStatus | None = None, olt_id: int | None = None, db: Session = Depends(get_db)):
     q = select(Onu)
     if status:
@@ -238,32 +246,32 @@ def list_onus(status: OnuStatus | None = None, olt_id: int | None = None, db: Se
     return db.scalars(q).all()
 
 
-@app.post("/onus/{onu_id}/authorize", response_model=schemas.OnuOut)
-def authorize(onu_id: int, body: schemas.AuthorizeIn, db: Session = Depends(get_db)):
+@app.post("/onus/{onu_id}/authorize", response_model=schemas.OnuOut, dependencies=[Depends(current_user)])
+def authorize(onu_id: int, body: schemas.AuthorizeIn, db: Session = Depends(get_db), user: AuthUser = Depends(current_user)):
     onu = _onu_or_404(db, onu_id)
     plan = db.get(SpeedPlan, body.speed_plan_id)
     if plan is None:
         raise HTTPException(404, "Plan de velocidad no encontrado")
-    return _run(services.authorize_onu, db, onu, body.vlan, plan, body.customer_name, body.customer_ref, body.actor)
+    return _run(services.authorize_onu, db, onu, body.vlan, plan, body.customer_name, body.customer_ref, user.username)
 
 
-@app.post("/onus/{onu_id}/suspend", response_model=schemas.OnuOut)
-def suspend(onu_id: int, db: Session = Depends(get_db)):
-    return _run(services.suspend_onu, db, _onu_or_404(db, onu_id))
+@app.post("/onus/{onu_id}/suspend", response_model=schemas.OnuOut, dependencies=[Depends(current_user)])
+def suspend(onu_id: int, db: Session = Depends(get_db), user: AuthUser = Depends(current_user)):
+    return _run(services.suspend_onu, db, _onu_or_404(db, onu_id), user.username)
 
 
-@app.post("/onus/{onu_id}/resume", response_model=schemas.OnuOut)
-def resume(onu_id: int, db: Session = Depends(get_db)):
-    return _run(services.resume_onu, db, _onu_or_404(db, onu_id))
+@app.post("/onus/{onu_id}/resume", response_model=schemas.OnuOut, dependencies=[Depends(current_user)])
+def resume(onu_id: int, db: Session = Depends(get_db), user: AuthUser = Depends(current_user)):
+    return _run(services.resume_onu, db, _onu_or_404(db, onu_id), user.username)
 
 
-@app.delete("/onus/{onu_id}", response_model=schemas.OnuOut)
-def delete(onu_id: int, db: Session = Depends(get_db)):
-    return _run(services.delete_onu, db, _onu_or_404(db, onu_id))
+@app.delete("/onus/{onu_id}", response_model=schemas.OnuOut, dependencies=[Depends(require_admin)])
+def delete(onu_id: int, db: Session = Depends(get_db), user: AuthUser = Depends(current_user)):
+    return _run(services.delete_onu, db, _onu_or_404(db, onu_id), user.username)
 
 
 # ---- Auditoría --------------------------------------------------------------
-@app.get("/audit")
+@app.get("/audit", dependencies=[Depends(require_admin)])
 def audit_log(limit: int = 100, db: Session = Depends(get_db)):
     rows = db.scalars(select(AuditLog).order_by(AuditLog.id.desc()).limit(limit)).all()
     return [

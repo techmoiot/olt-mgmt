@@ -4,48 +4,46 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ritsuko</title>
-<style>
-  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c2430; --muted:#667085; --line:#e3e6eb; --accent:#1f6feb; --ok:#13795b; --bad:#b42318; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#12161c; --card:#1a2029; --ink:#e8ecf1; --muted:#9aa5b4; --line:#2a3340; --accent:#5a9bff; --ok:#46c29a; --bad:#ff7b70; }
-  }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; }
-  main { max-width: 1020px; margin: 0 auto; padding: 24px 16px 64px; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  h2 { font-size: 16px; margin: 0 0 4px; }
-  h3 { font-size: 13px; margin: 14px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; grid-column: 1 / -1; }
-  .sub { color: var(--muted); margin: 0 0 14px; font-size: 14px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
-  form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-  label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
-  label.check { flex-direction: row; align-items: center; gap: 8px; }
-  input, select, textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-width: 0; }
-  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 6px; padding: 6px 11px; cursor: pointer; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button.danger { color: var(--bad); }
-  .actions { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { font-size: 12px; color: var(--muted); font-weight: 600; }
-  .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-  .msg { font-size: 13px; }
-  .ok { color: var(--ok); } .bad { color: var(--bad); }
-  textarea.script { width: 100%; min-height: 260px; font: 12.5px/1.5 ui-monospace, monospace; resize: vertical; }
-  code { font: 12.5px ui-monospace, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
-  ul.notes { color: var(--muted); font-size: 13px; padding-left: 18px; margin: 8px 0 0; }
-  .hidden { display: none; }
-  .hint { font-size: 12px; color: var(--muted); }
-</style>
+<link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-<main>
-  <h1>Ritsuko</h1>
-  <p class="sub">Registra tus OLTs y, si el servidor no está conectado al MikroTik, enlázalo por VPN.</p>
+<!-- ===== Login ===== -->
+<div class="login-wrap hidden" id="view-login">
+  <div class="card">
+    <h1>Ritsuko</h1>
+    <p class="sub">Inicia sesión para continuar.</p>
+    <form id="login-form">
+      <label>Usuario<input name="username" required autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+      <label>Contraseña<input name="password" type="password" required autocomplete="current-password"></label>
+      <div class="actions"><button class="primary" type="submit">Entrar</button><span class="msg" id="login-msg"></span></div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== Cambio de contraseña ===== -->
+<div class="login-wrap hidden" id="view-password">
+  <div class="card">
+    <h2 id="pw-title">Cambiar contraseña</h2>
+    <p class="sub" id="pw-sub"></p>
+    <form id="pw-form">
+      <label>Contraseña actual<input name="current_password" type="password" required autocomplete="current-password"></label>
+      <label>Contraseña nueva<input name="new_password" type="password" required minlength="10" autocomplete="new-password"></label>
+      <label>Repite la nueva<input name="repeat" type="password" required minlength="10" autocomplete="new-password"></label>
+      <div class="actions"><button class="primary" type="submit">Guardar</button><button type="button" id="pw-cancel" class="hidden">Cancelar</button><span class="msg" id="pw-msg"></span></div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== Aplicación ===== -->
+<main class="hidden" id="view-app">
+  <div class="topbar">
+    <div><h1>Ritsuko</h1>
+    <p class="sub">Registra tus OLTs y, si el servidor no está conectado al MikroTik, enlázalo por VPN.</p></div>
+    <div class="who"><span id="who-name"></span><span class="badge" id="who-role"></span><button id="btn-pw" type="button">Cambiar contraseña</button><button id="btn-logout" type="button">Salir</button></div>
+  </div>
 
   <!-- ===== MikroTik / VPN ===== -->
-  <section class="card">
+  <section class="card admin-only">
     <h2>1. MikroTik y VPN (opcional)</h2>
     <p class="sub">Si el servidor está lejos del MikroTik, llega a las OLTs por un túnel WireGuard (requiere RouterOS 7). Si está conectado directo, sáltate este paso.</p>
     <form id="gw-form">
@@ -59,11 +57,11 @@
       <thead><tr><th>Nombre</th><th>Endpoint</th><th>Túnel</th><th>Estado de la VPN</th><th></th></tr></thead>
       <tbody id="gws"></tbody>
     </table>
-    <p class="sub hidden" id="gw-empty" style="margin-top:10px">Sin MikroTiks registrados.</p>
+    <p class="sub hidden mt" id="gw-empty">Sin MikroTiks registrados.</p>
   </section>
 
   <!-- ===== Alta de OLT ===== -->
-  <section class="card">
+  <section class="card admin-only">
     <h2>2. Agregar OLT</h2>
     <form id="add-form">
       <h3>Equipo</h3>
@@ -100,11 +98,11 @@
       <thead><tr><th>Nombre</th><th>Marca / modelo</th><th>Acceso</th><th>Conexión</th><th></th></tr></thead>
       <tbody id="olts"></tbody>
     </table>
-    <p class="sub hidden" id="empty" style="margin-top:10px">Todavía no hay OLTs registradas.</p>
+    <p class="sub hidden mt" id="empty">Todavía no hay OLTs registradas.</p>
   </section>
 
   <!-- ===== Script de la OLT (VLAN + firewall en el MikroTik) ===== -->
-  <section class="card hidden" id="olt-script-card">
+  <section class="card hidden admin-only" id="olt-script-card">
     <h2>Script MikroTik para <span id="olt-script-name"></span></h2>
     <p class="sub">Crea en el MikroTik la VLAN de gestión de la OLT y deja pasar solo al servidor hacia ella. Solo se genera: revísalo y pégalo tú en el router.</p>
     <form id="olt-script-form">
@@ -120,7 +118,7 @@
   </section>
 
   <!-- ===== Script VPN del MikroTik ===== -->
-  <section class="card hidden" id="vpn-card">
+  <section class="card hidden admin-only" id="vpn-card">
     <h2>Script de la VPN para <span id="vpn-name"></span></h2>
     <p class="sub">Paso a paso: (1) pega este script en el MikroTik, (2) copia la clave pública que imprime, (3) pégala en la tabla de MikroTiks, (4) en el servidor genera su configuración.</p>
     <form id="vpn-form">
@@ -133,192 +131,26 @@
   <section class="card hidden" id="out-card">
     <h2 id="out-title">Script generado</h2>
     <textarea class="script" id="out-script" readonly></textarea>
-    <div class="actions" style="margin-top:8px"><button id="out-copy" type="button">Copiar</button><span class="msg" id="copy-msg"></span></div>
+    <div class="actions mt8"><button id="out-copy" type="button">Copiar</button><span class="msg" id="copy-msg"></span></div>
     <ul class="notes" id="out-notes"></ul>
   </section>
+
+  <!-- ===== Usuarios (admin) ===== -->
+  <section class="card admin-only">
+    <h2>Usuarios</h2>
+    <p class="sub">Quién puede entrar. El operador autoriza y suspende ONUs; solo el administrador gestiona OLTs, MikroTik, planes y usuarios.</p>
+    <form id="user-form">
+      <label>Usuario<input name="username" required pattern="[a-z0-9._-]{3,32}" autocomplete="off" placeholder="juan"></label>
+      <label>Contraseña inicial<input name="password" type="password" required minlength="10" autocomplete="new-password"></label>
+      <label>Rol<select name="role"><option value="operator">Operador</option><option value="admin">Administrador</option></select></label>
+      <div class="actions"><button class="primary" type="submit">Crear usuario</button><span class="msg" id="user-msg"></span><span class="hint">Mínimo 10 caracteres. Tendrá que cambiarla al primer ingreso.</span></div>
+    </form>
+    <table>
+      <thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Último ingreso</th><th></th></tr></thead>
+      <tbody id="users"></tbody>
+    </table>
+  </section>
 </main>
-
-<script>
-let currentOlt = null, currentGw = null;
-const $ = id => document.getElementById(id);
-
-function el(tag, props = {}, ...kids) {
-  const e = Object.assign(document.createElement(tag), props);
-  e.append(...kids);
-  return e;
-}
-function setMsg(node, text, ok) { node.textContent = text; node.className = "msg " + (ok ? "ok" : "bad"); }
-
-async function api(path, opts = {}) {
-  const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
-  if (res.status === 204) return null;
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const d = data.detail;
-    throw new Error(typeof d === "string" ? d
-      : Array.isArray(d) ? d.map(e => e.loc.slice(1).join(".") + ": " + e.msg).join("; ") : "Error " + res.status);
-  }
-  return data;
-}
-
-function showOutput(title, r) {
-  $("out-title").textContent = title;
-  $("out-script").value = r.script;
-  const ul = $("out-notes"); ul.replaceChildren();
-  for (const n of r.notes) ul.append(el("li", { textContent: n }));
-  $("out-card").classList.remove("hidden");
-  $("out-card").scrollIntoView({ behavior: "smooth" });
-}
-
-$("out-copy").addEventListener("click", async () => {
-  const ta = $("out-script");
-  try { await navigator.clipboard.writeText(ta.value); setMsg($("copy-msg"), "Copiado", true); }
-  catch { ta.select(); document.execCommand("copy"); }
-});
-
-/* ---------- Gateways / VPN ---------- */
-async function loadGateways() {
-  const gws = await api("/gateways");
-  const tbody = $("gws"); tbody.replaceChildren();
-  $("gw-empty").classList.toggle("hidden", gws.length > 0);
-  const sel = $("gw-select"); const keep = sel.value;
-  sel.replaceChildren(new Option("Directo (misma red)", ""));
-  for (const g of gws) sel.add(new Option(`Por VPN vía ${g.name}`, g.id));
-  sel.value = keep;
-
-  for (const g of gws) {
-    const tr = tbody.insertRow();
-    tr.insertCell().textContent = g.name;
-    tr.insertCell().textContent = `${g.endpoint}:${g.listen_port}/udp`;
-    tr.insertCell().textContent = `${g.tunnel_net} (MikroTik ${g.router_ip} · servidor ${g.server_ip})`;
-    const st = tr.insertCell();
-    if (g.vpn_ready) {
-      st.append(el("div", { className: "msg ok", textContent: "Clave del MikroTik registrada" }),
-        el("div", { className: "hint" }, "En el servidor: ", el("code", { textContent: `python tools/wg_server_config.py ${g.id}` })));
-    } else {
-      const input = el("input", { placeholder: "Clave pública que imprime el script", size: 30 });
-      const save = el("button", { textContent: "Guardar clave" });
-      const msg = el("div", { className: "msg" });
-      save.onclick = async () => {
-        try {
-          await api(`/gateways/${g.id}/router-key`, { method: "PUT", body: JSON.stringify({ public_key: input.value.trim() }) });
-          loadGateways();
-        } catch (e) { setMsg(msg, e.message, false); }
-      };
-      st.append(el("div", { className: "msg bad", textContent: "Falta la clave pública del MikroTik" }), input, " ", save, msg);
-    }
-    const act = tr.insertCell(); act.className = "row-actions";
-    const bScript = el("button", { textContent: "Script VPN" });
-    bScript.onclick = () => { currentGw = g; $("vpn-name").textContent = g.name; $("vpn-card").classList.remove("hidden"); $("vpn-card").scrollIntoView({ behavior: "smooth" }); };
-    const bDel = el("button", { textContent: "Eliminar", className: "danger" });
-    bDel.onclick = async () => {
-      if (!confirm(`¿Quitar "${g.name}" del sistema?`)) return;
-      try { await api(`/gateways/${g.id}`, { method: "DELETE" }); loadGateways(); }
-      catch (e) { alert(e.message); }
-    };
-    act.append(bScript, bDel);
-  }
-}
-
-$("gw-form").addEventListener("submit", async e => {
-  e.preventDefault();
-  const body = Object.fromEntries(new FormData(e.target));
-  body.listen_port = Number(body.listen_port) || 13231;
-  if (!body.tunnel_net) delete body.tunnel_net;
-  try {
-    await api("/gateways", { method: "POST", body: JSON.stringify(body) });
-    e.target.reset(); $("gw-form").elements.listen_port.value = 13231;
-    setMsg($("gw-msg"), "MikroTik agregado", true); loadGateways();
-  } catch (err) { setMsg($("gw-msg"), err.message, false); }
-});
-
-$("vpn-form").addEventListener("submit", async e => {
-  e.preventDefault();
-  const body = Object.fromEntries(new FormData(e.target));
-  if (!body.server_public_ip) delete body.server_public_ip;
-  try {
-    const r = await api(`/gateways/${currentGw.id}/vpn-script`, { method: "POST", body: JSON.stringify(body) });
-    showOutput(`Script VPN: ${currentGw.name}`, r); setMsg($("vpn-msg"), "Script generado", true);
-  } catch (err) { setMsg($("vpn-msg"), err.message, false); }
-});
-
-/* ---------- OLTs ---------- */
-async function loadVendors() {
-  for (const v of await api("/vendors")) $("vendor").add(new Option(v, v));
-}
-
-async function loadOlts() {
-  const tbody = $("olts"); tbody.replaceChildren();
-  const [olts, gws] = [await api("/olts"), await api("/gateways")];
-  const gwName = Object.fromEntries(gws.map(g => [g.id, g.name]));
-  $("empty").classList.toggle("hidden", olts.length > 0);
-  for (const o of olts) {
-    const tr = tbody.insertRow();
-    tr.insertCell().textContent = o.name;
-    tr.insertCell().textContent = o.vendor + (o.model ? " " + o.model : "");
-    const acc = tr.insertCell();
-    acc.append(el("div", { textContent: `${o.host} · ${o.cli_protocol.toUpperCase()} :${o.cli_protocol === "ssh" ? o.ssh_port : o.telnet_port}` }),
-      el("div", { className: "hint", textContent: `SNMP :${o.snmp_port} ${o.has_snmp_read ? "· lectura" : ""} ${o.has_snmp_write ? "· escritura" : ""}` }),
-      el("div", { className: "hint", textContent: o.gateway_id ? `VPN vía ${gwName[o.gateway_id] || "?"}` : "Acceso directo" }));
-    const st = tr.insertCell(); st.className = "msg"; st.textContent = "—";
-    const act = tr.insertCell(); act.className = "row-actions";
-
-    const bTest = el("button", { textContent: "Probar conexión" });
-    bTest.onclick = async () => {
-      st.className = "msg"; st.textContent = "probando…";
-      try {
-        const r = await api(`/olts/${o.id}/test`, { method: "POST" });
-        st.replaceChildren(...r.checks.map(c => el("div", {
-          className: "msg " + (c.reachable ? "ok" : c.reachable === false ? "bad" : ""),
-          textContent: `${c.service.toUpperCase()} :${c.port} ${c.reachable ? "responde" + (c.latency_ms != null ? ` (${c.latency_ms} ms)` : "") : c.reachable === false ? "sin respuesta" : "no comprobado"}`,
-        })));
-      } catch (e) { setMsg(st, e.message, false); }
-    };
-    const bMk = el("button", { textContent: "Script MikroTik" });
-    bMk.onclick = () => openOltScript(o);
-    const bDel = el("button", { textContent: "Eliminar", className: "danger" });
-    bDel.onclick = async () => {
-      if (!confirm(`¿Quitar "${o.name}" del sistema? No toca la OLT física.`)) return;
-      try { await api(`/olts/${o.id}`, { method: "DELETE" }); loadOlts(); loadGateways(); }
-      catch (e) { setMsg(st, e.message, false); }
-    };
-    act.append(bTest, bMk, bDel);
-  }
-}
-
-$("add-form").addEventListener("submit", async e => {
-  e.preventDefault();
-  const body = Object.fromEntries(new FormData(e.target));
-  for (const k of ["ssh_port", "telnet_port", "snmp_port"]) body[k] = Number(body[k]);
-  body.gateway_id = body.gateway_id ? Number(body.gateway_id) : null;
-  try {
-    await api("/olts", { method: "POST", body: JSON.stringify(body) });
-    e.target.reset(); setMsg($("add-msg"), "OLT agregada", true); loadOlts(); loadGateways();
-  } catch (err) { setMsg($("add-msg"), err.message, false); }
-});
-
-function openOltScript(olt) {
-  currentOlt = olt;
-  $("olt-script-name").textContent = olt.name;
-  // Con VPN el origen es la IP del servidor dentro del túnel, no hace falta pedirla.
-  $("system-ip-label").classList.toggle("hidden", !!olt.gateway_id);
-  $("olt-script-card").classList.remove("hidden");
-  $("olt-script-card").scrollIntoView({ behavior: "smooth" });
-}
-
-$("olt-script-form").addEventListener("submit", async e => {
-  e.preventDefault();
-  const body = Object.fromEntries(new FormData(e.target));
-  body.vlan_id = Number(body.vlan_id); body.prefix = Number(body.prefix);
-  body.masquerade = e.target.elements.masquerade.checked;
-  if (!body.system_ip || currentOlt.gateway_id) delete body.system_ip;
-  try {
-    const r = await api(`/olts/${currentOlt.id}/mikrotik-script`, { method: "POST", body: JSON.stringify(body) });
-    showOutput(`Script de VLAN y firewall: ${currentOlt.name}`, r); setMsg($("olt-script-msg"), "Script generado", true);
-  } catch (err) { setMsg($("olt-script-msg"), err.message, false); }
-});
-
-loadVendors().then(() => loadGateways().then(loadOlts));
-</script>
+<script src="/static/app.js"></script>
 </body>
 </html>

@@ -1,16 +1,12 @@
-import os
-import tempfile
 
-# Base de datos temporal, antes de importar la app
-os.environ["ONU_DATABASE_URL"] = f"sqlite:///{tempfile.mkdtemp()}/test.db"
 
-from fastapi.testclient import TestClient  # noqa: E402
+from tests.helpers import AuthedClient
 
 from app.adapters.mock import mock_add_unauthorized, mock_reset  # noqa: E402
 from app.db import Base, engine  # noqa: E402
 from app.main import app  # noqa: E402
 
-client = TestClient(app)
+client = AuthedClient(app)
 
 
 def setup_function():

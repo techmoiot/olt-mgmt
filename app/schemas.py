@@ -146,4 +146,3 @@ class AuthorizeIn(BaseModel):
     speed_plan_id: int                # plan de velocidad (límite en la OLT)
     customer_name: str
     customer_ref: str = ""
-    actor: str = "api"
