@@ -34,7 +34,16 @@ Como root dentro del LXC, un solo comando. La primera vez instala; las siguiente
 curl -fsSL https://raw.githubusercontent.com/techmoiot/olt-mgmt/main/install.sh | bash
 ```
 
-Instala lo que falte (git, python3-venv), crea el usuario `oltmgmt`, el código en `/opt/olt-mgmt`, los datos en `/var/lib/olt-mgmt`, la configuración en `/etc/olt-mgmt.env` (nunca la sobrescribe) y el servicio `olt-mgmt`, y comprueba que responde. Por defecto escucha solo en `127.0.0.1:8000` porque la API aún no tiene login; abre la pantalla web con un túnel SSH (`ssh -L 8000:127.0.0.1:8000 root@IP`). Variables opcionales: `OLT_REPO`, `OLT_BRANCH`, `OLT_DIR`, `OLT_DATA`, `OLT_ENV`, `OLT_BIND`, `OLT_PORT`. Si el repositorio es privado, `raw.githubusercontent.com` y `git clone` necesitan un token o una deploy key.
+Instala lo que falte (git, python3-venv), crea el usuario `oltmgmt`, el código en `/opt/olt-mgmt`, los datos en `/var/lib/olt-mgmt`, la configuración en `/etc/olt-mgmt.env` (nunca la sobrescribe) y el servicio `olt-mgmt`, y comprueba que responde. **Cómo abrir la pantalla web.** Por defecto escucha solo en `127.0.0.1:8000`, porque la API aún no tiene login y quien llegue a ese puerto puede operar tus OLTs. Dos opciones:
+
+- **Túnel SSH (recomendado):** `ssh -L 8000:127.0.0.1:8000 root@IP_DEL_LXC` y abre `http://localhost:8000`.
+- **Directo por la IP del LXC** (`http://IP_DEL_LXC:8000`), solo en una red de gestión de confianza o con firewall:
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/techmoiot/olt-mgmt/main/install.sh | OLT_BIND=0.0.0.0 bash
+  ```
+  Basta indicarlo una vez: se guarda en `/etc/olt-mgmt.env` y las actualizaciones lo conservan. Para volver a modo local, `OLT_BIND=127.0.0.1`.
+
+Otras variables opcionales: `OLT_REPO`, `OLT_BRANCH`, `OLT_DIR`, `OLT_DATA`, `OLT_ENV`, `OLT_PORT`. Si el repositorio es privado, `raw.githubusercontent.com` y `git clone` necesitan un token o una deploy key.
 
 ## Ejecutar en desarrollo
 

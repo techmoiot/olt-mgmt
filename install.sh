@@ -10,8 +10,10 @@
 #   OLT_DIR    dónde queda el código       (/opt/olt-mgmt)
 #   OLT_DATA   base de datos y clave       (/var/lib/olt-mgmt)
 #   OLT_ENV    archivo de configuración    (/etc/olt-mgmt.env)
-#   OLT_BIND   IP donde escucha            (127.0.0.1: solo local; la API aún no tiene login)
+#   OLT_BIND   IP donde escucha            (127.0.0.1: solo local; 0.0.0.0 o la IP del LXC para abrirlo por red)
 #   OLT_PORT   puerto                      (8000)
+# OLT_BIND y OLT_PORT se guardan en OLT_ENV y se conservan en las actualizaciones: basta indicarlos una vez.
+# OJO: la API aún no tiene login. Ábrela por red solo en una red de gestión de confianza.
 
 # Todo vive dentro de main() y se llama al final: si la descarga llega cortada no se ejecuta nada,
 # y ningún comando puede leer el script desde la entrada estándar cuando se usa "| bash".
@@ -23,10 +25,9 @@ main() {
   local APP_DIR="${OLT_DIR:-/opt/olt-mgmt}"
   local DATA_DIR="${OLT_DATA:-/var/lib/olt-mgmt}"
   local ENV_FILE="${OLT_ENV:-/etc/olt-mgmt.env}"
-  local BIND="${OLT_BIND:-127.0.0.1}"
-  local PORT="${OLT_PORT:-8000}"
+  local BIND PORT
   local SVC_USER="oltmgmt"
-  local UNIT="/etc/systemd/system/olt-mgmt.service"
+  local UNIT="${OLT_UNIT:-/etc/systemd/system/olt-mgmt.service}"
 
   say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
   die() { printf '\033[1;31mError:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -94,6 +95,32 @@ EOF
     chmod 600 "$ENV_FILE"
   fi
 
+  # Dónde escucha: se guarda en el archivo de configuración para que las actualizaciones no lo reviertan.
+  # Si se indica OLT_BIND / OLT_PORT se actualiza; si no, se conserva lo que ya había (o el valor por defecto).
+  set_env() {
+    if grep -q "^$1=" "$ENV_FILE"; then sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"; else echo "$1=$2" >> "$ENV_FILE"; fi
+  }
+  ensure_setting() {  # clave, valor indicado por el usuario, valor por defecto
+    if [ -n "$2" ]; then set_env "$1" "$2"; elif ! grep -q "^$1=" "$ENV_FILE"; then set_env "$1" "$3"; fi
+  }
+  valid_ipv4() {
+    local -a o; local x
+    IFS=. read -ra o <<< "$1"
+    [ "${#o[@]}" -eq 4 ] || return 1
+    for x in "${o[@]}"; do { [[ "$x" =~ ^[0-9]{1,3}$ ]] && [ "$x" -le 255 ]; } || return 1; done
+  }
+  valid_port() { [[ "$1" =~ ^[0-9]{1,5}$ ]] && [ "$1" -ge 1 ] && [ "$1" -le 65535 ]; }
+  # Se valida ANTES de escribir: un valor inválido no debe quedar guardado en la configuración.
+  [ -z "${OLT_BIND-}" ] || valid_ipv4 "$OLT_BIND" || die "OLT_BIND debe ser una IPv4 (por ejemplo 127.0.0.1, 0.0.0.0 o la IP del LXC); recibí: '$OLT_BIND'"
+  [ -z "${OLT_PORT-}" ] || valid_port "$OLT_PORT" || die "OLT_PORT debe ser un puerto entre 1 y 65535; recibí: '$OLT_PORT'"
+  ensure_setting OLT_BIND "${OLT_BIND-}" 127.0.0.1
+  ensure_setting OLT_PORT "${OLT_PORT-}" 8000
+  BIND="$(sed -n 's/^OLT_BIND=//p' "$ENV_FILE" | tail -1)"
+  PORT="$(sed -n 's/^OLT_PORT=//p' "$ENV_FILE" | tail -1)"
+  # Por si alguien editó el archivo a mano con un valor inválido
+  valid_ipv4 "$BIND" || die "OLT_BIND en $ENV_FILE no es una IPv4 válida: '$BIND'"
+  valid_port "$PORT" || die "OLT_PORT en $ENV_FILE no es un puerto válido: '$PORT'"
+
   # 6) Servicio systemd
   local started=0
   if [ -d /run/systemd/system ]; then
@@ -108,7 +135,7 @@ User=$SVC_USER
 Group=$SVC_USER
 WorkingDirectory=$APP_DIR
 EnvironmentFile=$ENV_FILE
-ExecStart=$APP_DIR/.venv/bin/uvicorn app.main:app --host $BIND --port $PORT
+ExecStart=$APP_DIR/.venv/bin/uvicorn app.main:app --host \${OLT_BIND} --port \${OLT_PORT}
 Restart=on-failure
 NoNewPrivileges=true
 
@@ -127,15 +154,16 @@ EOF
   # 7) Comprobación
   local version; version="$(git -C "$APP_DIR" rev-parse --short HEAD)"
   if [ "$started" -eq 1 ]; then
-    local ok=0 i
+    local ok=0 i probe="$BIND"
+    [ "$probe" = "0.0.0.0" ] && probe="127.0.0.1"
     for i in $(seq 1 20); do
-      if "$APP_DIR/.venv/bin/python" -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:$PORT/health', timeout=2)" >/dev/null 2>&1; then
+      if "$APP_DIR/.venv/bin/python" -c "import urllib.request; urllib.request.urlopen('http://$probe:$PORT/health', timeout=2)" >/dev/null 2>&1; then
         ok=1; break
       fi
       sleep 1
     done
     if [ "$ok" -eq 1 ]; then
-      say "Listo (versión $version): el servicio responde en http://127.0.0.1:$PORT"
+      say "Listo (versión $version): el servicio responde en http://$probe:$PORT"
     else
       die "El servicio no respondió en 20 s. Revisa:  journalctl -u olt-mgmt -n 50 --no-pager"
     fi
@@ -143,16 +171,21 @@ EOF
     say "Listo (versión $version)."
   fi
 
-  cat <<EOF
-
-Siguientes pasos
-  - Abrir la pantalla web desde tu PC (túnel SSH):  ssh -L $PORT:127.0.0.1:$PORT root@IP_DE_ESTE_SERVIDOR
-    y luego http://localhost:$PORT
-  - Respalda la clave de cifrado (se crea al guardar la primera contraseña): $DATA_DIR/secret.key
-    Sin ella no se pueden recuperar las contraseñas ni claves guardadas.
-  - La API aún no tiene login: por eso escucha solo en $BIND. No la abras a la red (OLT_BIND) hasta que lo tenga.
-  - Para actualizar más adelante, vuelve a correr este mismo comando.
-EOF
+  echo
+  echo "Siguientes pasos"
+  if [ "$BIND" = "127.0.0.1" ]; then
+    echo "  - Escucha solo dentro del LXC (127.0.0.1). Para abrir la pantalla web desde tu PC, con un túnel SSH:"
+    echo "      ssh -L $PORT:127.0.0.1:$PORT root@IP_DEL_LXC     y luego     http://localhost:$PORT"
+    echo "  - Para abrirla directo por la IP del LXC (http://IP_DEL_LXC:$PORT), vuelve a correr con OLT_BIND=0.0.0.0"
+    echo "    (solo si esa red es de confianza: la API aún no tiene login)."
+  else
+    echo "  - Abre la pantalla web en  http://IP_DEL_LXC:$PORT   (escucha en $BIND)"
+    echo "  - ATENCIÓN: la API aún no tiene login; cualquiera que llegue a ese puerto puede operar tus OLTs."
+    echo "    Déjala solo en una red de gestión de confianza o limita el acceso con el firewall."
+  fi
+  echo "  - Respalda la clave de cifrado (se crea al guardar la primera contraseña): $DATA_DIR/secret.key"
+  echo "    Sin ella no se pueden recuperar las contraseñas ni claves guardadas."
+  echo "  - Para actualizar más adelante, vuelve a correr este mismo comando (conserva tu configuración)."
 }
 
 main "$@"

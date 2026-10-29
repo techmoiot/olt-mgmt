@@ -18,7 +18,17 @@ def test_install_script_runs_only_when_fully_downloaded():
 
 def test_install_script_listens_locally_by_default():
     # La API aún no tiene login: por defecto solo debe escuchar en 127.0.0.1.
-    assert 'OLT_BIND:-127.0.0.1' in SCRIPT.read_text()
+    assert 'ensure_setting OLT_BIND "${OLT_BIND-}" 127.0.0.1' in SCRIPT.read_text()
+
+
+def test_install_script_validates_bind_and_port_before_saving_them():
+    # Un valor inválido no debe llegar a guardarse en el archivo de configuración (rompería las
+    # ejecuciones siguientes), así que la validación tiene que ir antes de escribirlo.
+    text = SCRIPT.read_text()
+    validated = text.index('valid_ipv4 "$OLT_BIND"')
+    saved = text.index('ensure_setting OLT_BIND "${OLT_BIND-}"')
+    assert validated < saved
+    assert text.index('valid_port "$OLT_PORT"') < text.index('ensure_setting OLT_PORT "${OLT_PORT-}"')
 
 
 def test_install_script_never_overwrites_existing_config():
