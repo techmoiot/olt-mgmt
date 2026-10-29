@@ -1,4 +1,4 @@
-# OLT Management
+# Ritsuko
 
 Sistema de autorización y gestión de ONUs para OLTs de varias marcas (TP-Link, ZTE, VSOL, BTPON).
 
@@ -28,11 +28,19 @@ Servidor (LXC) ==WireGuard== MikroTik --VLAN de gestión--> OLT      (si no est�
 
 ## Instalar en el LXC (Debian 12 / Ubuntu 22.04+)
 
-Como root dentro del LXC, un solo comando. La primera vez instala; las siguientes **actualiza**:
+Como root dentro del LXC, un solo comando para instalar:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/techmoiot/olt-mgmt/main/install.sh | bash
 ```
+
+Eso deja además el comando **`ritsuko-update`** en el servidor. Desde ahí, para actualizar a la última versión basta:
+
+```bash
+ritsuko-update
+```
+
+(Trae el código nuevo y vuelve a correr el instalador ya actualizado; conserva tu configuración. También puedes volver a pegar el `curl`.)
 
 Instala lo que falte (git, python3-venv), crea el usuario `oltmgmt`, el código en `/opt/olt-mgmt`, los datos en `/var/lib/olt-mgmt`, la configuración en `/etc/olt-mgmt.env` (nunca la sobrescribe) y el servicio `olt-mgmt`, y comprueba que responde. **Cómo abrir la pantalla web.** Por defecto escucha solo en `127.0.0.1:8000`, porque la API aún no tiene login y quien llegue a ese puerto puede operar tus OLTs. Dos opciones:
 
@@ -41,9 +49,9 @@ Instala lo que falte (git, python3-venv), crea el usuario `oltmgmt`, el código 
   ```bash
   curl -fsSL https://raw.githubusercontent.com/techmoiot/olt-mgmt/main/install.sh | OLT_BIND=0.0.0.0 bash
   ```
-  Basta indicarlo una vez: se guarda en `/etc/olt-mgmt.env` y las actualizaciones lo conservan. Para volver a modo local, `OLT_BIND=127.0.0.1`.
+  Si ya está instalado: `OLT_BIND=0.0.0.0 ritsuko-update`. Basta indicarlo una vez: se guarda en `/etc/olt-mgmt.env` y las actualizaciones lo conservan. Para volver a modo local, `OLT_BIND=127.0.0.1`.
 
-Otras variables opcionales: `OLT_REPO`, `OLT_BRANCH`, `OLT_DIR`, `OLT_DATA`, `OLT_ENV`, `OLT_PORT`. Si el repositorio es privado, `raw.githubusercontent.com` y `git clone` necesitan un token o una deploy key.
+Otras variables opcionales: `OLT_REPO`, `OLT_BRANCH`, `OLT_DIR`, `OLT_DATA`, `OLT_ENV`, `OLT_PORT`, `OLT_CMD` (dónde se crea `ritsuko-update`). Si el repositorio es privado, `raw.githubusercontent.com` y `git clone` necesitan un token o una deploy key.
 
 ## Ejecutar en desarrollo
 

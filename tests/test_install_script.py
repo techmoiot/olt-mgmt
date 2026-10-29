@@ -13,7 +13,14 @@ def test_install_script_runs_only_when_fully_downloaded():
     # y ningún comando puede consumir el script desde la entrada estándar con "curl | bash".
     text = SCRIPT.read_text()
     assert text.startswith("#!/usr/bin/env bash")
-    assert text.rstrip().endswith('main "$@"')
+    # "exit $?" tras main: bash no sigue leyendo el archivo si se reemplaza durante una actualización.
+    assert text.rstrip().endswith('main "$@"\nexit $?')
+
+
+def test_install_script_creates_the_update_command():
+    text = SCRIPT.read_text()
+    assert "/usr/local/bin/ritsuko-update" in text
+    assert "exec bash \"$OLT_DIR/install.sh\"" in text      # el comando re-ejecuta el instalador ya actualizado
 
 
 def test_install_script_listens_locally_by_default():

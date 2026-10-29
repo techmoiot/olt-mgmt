@@ -16,7 +16,7 @@ from .vault import VaultError, encrypt
 
 Base.metadata.create_all(engine)
 
-app = FastAPI(title="OLT Management", version="0.1.0")
+app = FastAPI(title="Ritsuko", version="0.1.0")
 
 
 def _vendors() -> list[str]:

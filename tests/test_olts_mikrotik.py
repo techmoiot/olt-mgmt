@@ -111,7 +111,7 @@ def test_delete_olt_blocked_while_onus_authorized():
 
 def test_ui_is_served():
     r = client.get("/")
-    assert r.status_code == 200 and "OLT Management" in r.text
+    assert r.status_code == 200 and "Ritsuko" in r.text
 
 
 # ---- Script MikroTik (VLAN + firewall) --------------------------------------

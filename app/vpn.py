@@ -80,7 +80,7 @@ def generate_vpn_script(gw: Gateway, server_public_ip: str | None = None) -> tup
     src = f" src-address={server_public_ip}" if server_public_ip else ""
 
     L = [
-        f"# ===== VPN WireGuard: MikroTik <-> servidor OLT Management (gateway {gw.name}) =====",
+        f"# ===== VPN WireGuard: MikroTik <-> servidor Ritsuko (gateway {gw.name}) =====",
         f"# Generado {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC. REQUIERE RouterOS 7.x (v6 no trae WireGuard).",
         "# REVÍSALO antes de aplicarlo. Primero haz un respaldo:  /system backup save name=antes-vpn",
         "",
@@ -139,7 +139,7 @@ def server_config(gw: Gateway, olts: list[Olt]) -> str:
             raise InvalidRequest(f"La OLT {o.name!r} debe tener una IP (no un nombre) para enrutarla por la VPN")
         allowed.append(f"{o.host}/32")
     return (
-        f"# OLT Management -> gateway {gw.name}. Guarda como /etc/wireguard/onugw{gw.id}.conf con permisos 600.\n"
+        f"# Ritsuko -> gateway {gw.name}. Guarda como /etc/wireguard/onugw{gw.id}.conf con permisos 600.\n"
         "[Interface]\n"
         f"PrivateKey = {decrypt(gw.server_private_enc)}\n"
         f"Address = {gw.server_ip}/{prefix}\n"

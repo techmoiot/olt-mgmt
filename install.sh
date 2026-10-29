@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# OLT Management: instala o actualiza el servicio en un LXC/servidor Debian 12 / Ubuntu 22.04+.
+# Ritsuko: instala o actualiza el servicio en un LXC/servidor Debian 12 / Ubuntu 22.04+.
 # Se puede volver a correr cuantas veces haga falta: la primera vez instala, las demás actualiza.
 #
 #   curl -fsSL https://raw.githubusercontent.com/techmoiot/olt-mgmt/main/install.sh | bash
@@ -12,6 +12,7 @@
 #   OLT_ENV    archivo de configuración    (/etc/olt-mgmt.env)
 #   OLT_BIND   IP donde escucha            (127.0.0.1: solo local; 0.0.0.0 o la IP del LXC para abrirlo por red)
 #   OLT_PORT   puerto                      (8000)
+#   OLT_CMD    dónde crear el comando      (/usr/local/bin/ritsuko-update)
 # OLT_BIND y OLT_PORT se guardan en OLT_ENV y se conservan en las actualizaciones: basta indicarlos una vez.
 # OJO: la API aún no tiene login. Ábrela por red solo en una red de gestión de confianza.
 
@@ -76,6 +77,25 @@ main() {
       || die "No se pudo clonar $REPO (si el repositorio es privado necesitas una deploy key o un token)"
   fi
 
+  # Comando corto para actualizar: ritsuko-update. Trae el código nuevo y vuelve a correr el instalador
+  # (ya con la versión nueva). Guarda las rutas de esta instalación para no depender de variables.
+  local CMD="${OLT_CMD:-/usr/local/bin/ritsuko-update}"
+  mkdir -p "$(dirname "$CMD")"
+  {
+    echo '#!/usr/bin/env bash'
+    echo '# Actualiza Ritsuko a la última versión. Generado por install.sh: no lo edites a mano.'
+    echo 'set -e'
+    echo '[ "$(id -u)" -eq 0 ] || { echo "Ejecútalo como root:  sudo ritsuko-update" >&2; exit 1; }'
+    printf 'export OLT_REPO=%q OLT_BRANCH=%q OLT_DIR=%q OLT_DATA=%q OLT_ENV=%q OLT_CMD=%q\n' \
+      "$REPO" "$BRANCH" "$APP_DIR" "$DATA_DIR" "$ENV_FILE" "$CMD"
+    echo 'export GIT_TERMINAL_PROMPT=0'
+    echo 'git -C "$OLT_DIR" fetch -q origin </dev/null || { echo "No se pudo consultar el repositorio" >&2; exit 1; }'
+    echo 'git -C "$OLT_DIR" merge -q --ff-only "origin/$OLT_BRANCH" \'
+    echo '  || { echo "No se pudo actualizar sin conflictos: hay cambios locales en $OLT_DIR" >&2; exit 1; }'
+    echo 'exec bash "$OLT_DIR/install.sh" "$@"'
+  } > "$CMD"
+  chmod 755 "$CMD"
+
   # 4) Entorno de Python y dependencias
   [ -x "$APP_DIR/.venv/bin/python" ] || { say "Creando el entorno virtual"; python3 -m venv "$APP_DIR/.venv"; }
   say "Instalando dependencias de Python"
@@ -126,7 +146,7 @@ EOF
   if [ -d /run/systemd/system ]; then
     cat > "$UNIT" <<EOF
 [Unit]
-Description=OLT Management
+Description=Ritsuko
 After=network-online.target
 Wants=network-online.target
 
@@ -185,7 +205,8 @@ EOF
   fi
   echo "  - Respalda la clave de cifrado (se crea al guardar la primera contraseña): $DATA_DIR/secret.key"
   echo "    Sin ella no se pueden recuperar las contraseñas ni claves guardadas."
-  echo "  - Para actualizar más adelante, vuelve a correr este mismo comando (conserva tu configuración)."
+  echo "  - Para actualizar más adelante, escribe en este servidor:   ritsuko-update   (conserva tu configuración)"
 }
 
 main "$@"
+exit $?

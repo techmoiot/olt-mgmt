@@ -79,7 +79,7 @@ def generate_script(p: MikrotikParams) -> tuple[str, list[str]]:
     L: list[str] = []
     add = L.append
     add(f"# ===== Conexión sistema <-> OLT {label} a través del MikroTik =====")
-    add(f"# Generado {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC por OLT Management.")
+    add(f"# Generado {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC por Ritsuko.")
     add("# REVÍSALO antes de aplicarlo. Primero haz un respaldo:  /system backup save name=antes-olt")
     add(f"# Sistema: {system}   OLT: {olt}   Red de gestión: {net}   VLAN: {p.vlan_id}")
     add("")
