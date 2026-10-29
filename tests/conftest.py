@@ -4,6 +4,10 @@ import tempfile
 # Base de datos temporal, antes de que se importe la app
 os.environ.setdefault("ONU_DATABASE_URL", f"sqlite:///{tempfile.mkdtemp()}/test.db")
 
+from cryptography.fernet import Fernet  # noqa: E402
+
+os.environ.setdefault("ONU_SECRET_KEY", Fernet.generate_key().decode())
+
 import pytest  # noqa: E402
 
 

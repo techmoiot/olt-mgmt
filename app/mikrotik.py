@@ -29,15 +29,17 @@ def _clean(text: str) -> str:
 class MikrotikParams:
     olt_name: str
     olt_ip: str
-    olt_protocol: str       # ssh | telnet | snmp
-    olt_port: int
-    system_ip: str
+    cli_protocol: str       # ssh | telnet
+    cli_port: int
+    snmp_port: int | None   # None = no se usa SNMP con esta OLT, no se abre
+    system_ip: str          # IP desde la que el sistema llega al MikroTik (LAN o IP del túnel VPN)
     trunk_interface: str    # puerto del MikroTik que va hacia la OLT (o hacia el switch que la lleva)
     vlan_id: int
     gateway_ip: str         # IP que tendrá el MikroTik en la VLAN de gestión
     prefix: int
     bridge: str = ""        # si el puerto está en un bridge con vlan-filtering, nombre del bridge
     masquerade: bool = True
+    via_vpn: bool = False   # True: system_ip es la IP del servidor dentro del túnel WireGuard
 
 
 def generate_script(p: MikrotikParams) -> tuple[str, list[str]]:
@@ -61,6 +63,8 @@ def generate_script(p: MikrotikParams) -> tuple[str, list[str]]:
             f"El sistema ({system}) está dentro de {net}, la misma red de la OLT: "
             "no necesita pasar por el MikroTik, solo que su puerto pertenezca a esa VLAN"
         )
+    if system == gateway:
+        raise InvalidRequest("La IP del sistema no puede ser la misma que la del gateway")
 
     tag = "onu-auth:" + re.sub(r"[^a-z0-9]+", "-", p.olt_name.lower()).strip("-")
     label = _clean(p.olt_name)
@@ -68,11 +72,9 @@ def generate_script(p: MikrotikParams) -> tuple[str, list[str]]:
     vlan_parent = p.bridge or p.trunk_interface
 
     # Puertos que hay que abrir según cómo habla el sistema con esta OLT
-    rules = [("icmp", None, "ping")]
-    if p.olt_protocol in ("ssh", "telnet"):
-        rules.append(("tcp", str(p.olt_port), p.olt_protocol))
-    if p.olt_protocol == "snmp":
-        rules.append(("udp", str(p.olt_port if p.olt_port else 161), "snmp"))
+    rules = [("icmp", None, "ping"), ("tcp", str(p.cli_port), p.cli_protocol)]
+    if p.snmp_port:
+        rules.append(("udp", str(p.snmp_port), "snmp"))
 
     L: list[str] = []
     add = L.append
@@ -132,9 +134,13 @@ def generate_script(p: MikrotikParams) -> tuple[str, list[str]]:
     add("# 5) Prueba")
     add(f"/ping {olt} count=3")
 
+    if p.via_vpn:
+        first = f"El servidor llega por el túnel WireGuard (su IP en el túnel es {system}); la VPN debe estar levantada antes de probar la conexión."
+    else:
+        first = f"El sistema ({system}) debe tener al MikroTik como gateway para llegar a {net}."
     notes = [
-        f"El sistema ({system}) debe tener al MikroTik como gateway para llegar a {net}.",
-        f"La OLT debe tener la IP {olt} en la VLAN {p.vlan_id} y permitir {p.olt_protocol.upper()} desde el MikroTik.",
+        first,
+        f"La OLT debe tener la IP {olt} en la VLAN {p.vlan_id} y permitir {p.cli_protocol.upper()} desde el MikroTik.",
         "Las reglas del firewall se insertan al principio de la cadena forward. Se asume que ya tienes "
         "una regla que acepta el tráfico established/related (la configuración por defecto la trae).",
     ]

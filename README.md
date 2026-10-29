@@ -7,46 +7,76 @@ Sistema de autorización y gestión de ONUs para OLTs de varias marcas (TP-Link,
 | Componente | Estado |
 |---|---|
 | API (FastAPI), base de datos, auditoría | Listo (esqueleto) |
+| Alta de OLTs completa (IP, puertos SSH/Telnet/SNMP, comunidades, usuario, contraseña) | Listo, secretos cifrados |
+| VPN WireGuard servidor <-> MikroTik (script RouterOS + config del servidor) | Listo (sintaxis sin probar en un router real) |
+| Script MikroTik de VLAN de gestión y firewall por OLT | Listo (sintaxis sin probar en un router real) |
 | Adaptador simulado (`mock`) | Listo, sirve para probar el flujo |
 | Adaptador TP-Link DS-P7001-08 | Conexión SSH lista; comandos pendientes de salidas reales de la CLI |
 | Adaptadores ZTE, VSOL, BTPON | Pendientes |
-| Alta de OLTs + prueba de conexión (API y pantalla web) | Listo |
-| Generador de script MikroTik | Listo (sintaxis sin probar en un router real) |
-| Panel web de autorización de ONUs | Pendiente |
+| Pantalla web: alta de OLTs, MikroTik/VPN, scripts | Listo (`/`) |
+| Pantalla web de autorización de ONUs | Pendiente |
 
 ## Arquitectura
 
 ```
 API (FastAPI) -> services (locks por OLT, auditoría) -> adaptador por marca -> OLT
                                   |
-                              PostgreSQL / SQLite
+                      PostgreSQL / SQLite  (secretos cifrados con Fernet)
+
+Servidor (LXC) ==WireGuard== MikroTik --VLAN de gestión--> OLT      (si no están conectados directo)
 ```
 
-Cada marca implementa la interfaz de `app/adapters/base.py`
-(`list_unauthorized`, `authorize`, `suspend`, `resume`, `delete`).
+## Ejecutar en desarrollo
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+# Pantalla web: http://localhost:8000/    Documentación de la API: http://localhost:8000/docs
+pytest
+```
+
+Configuración por variables de entorno (prefijo `ONU_`), por ejemplo en `.env`:
+
+```
+ONU_DATABASE_URL=postgresql+psycopg://usuario:clave@localhost/onu_auth
+ONU_SECRET_KEY=...   # opcional; si falta se crea ./secret.key (permisos 600) la primera vez
+```
+
+**Respalda la clave de cifrado** (`secret.key` o `ONU_SECRET_KEY`) aparte de la base de datos: sin ella no se pueden descifrar las contraseñas, comunidades SNMP ni las claves de VPN guardadas.
 
 ## Agregar una OLT
 
-Desde la web (`http://servidor:8000/`) o la API:
+Desde la web o `POST /olts`. Datos: nombre, marca, modelo, **IP de la OLT**, **puertos SSH, Telnet y SNMP**, protocolo principal de consola, usuario, contraseña, **comunidad SNMP de lectura y de escritura**, y cómo llega el servidor a ella (directo o por la VPN de un MikroTik).
 
-- `POST /olts`: nombre, marca, IP de gestión, protocolo (ssh/telnet/snmp), puerto (si se omite, el estándar del protocolo) y credenciales. Valida marca, formato de campos y nombres duplicados; la contraseña nunca se devuelve.
-- `POST /olts/{id}/test`: prueba TCP al puerto de gestión. No envía credenciales ni comandos.
-- `DELETE /olts/{id}`: la quita del sistema (no toca la OLT física). Se bloquea si tiene ONUs autorizadas.
+- Contraseña y comunidades se guardan **cifradas** y la API nunca las devuelve (solo indica si están configuradas).
+- `POST /olts/{id}/test`: prueba TCP a cada puerto de consola. No envía credenciales. SNMP (UDP) aún no se comprueba.
+- `DELETE /olts/{id}`: la quita del sistema (no toca la OLT física); se bloquea si tiene ONUs autorizadas.
 
-## Conectar el sistema con la OLT a través del MikroTik
+## Conectar el servidor con las OLTs
 
-`POST /olts/{id}/mikrotik-script` (o el botón "Script MikroTik" en la web) **genera** un script de RouterOS; el sistema nunca se conecta al MikroTik ni lo ejecuta. Datos que pide: IP del sistema, puerto del MikroTik hacia la OLT, VLAN de gestión, IP del MikroTik en esa VLAN y prefijo (y el bridge, si usa vlan-filtering).
+### Si el servidor está conectado directo al MikroTik
+En la OLT, botón **Script MikroTik**: indicas la IP del servidor, el puerto del MikroTik hacia la OLT, la VLAN de gestión y la IP del MikroTik en esa VLAN.
 
-El script solo **agrega** cosas (nunca borra ni modifica lo existente) y se puede volver a correr sin duplicar:
+### Si el servidor está lejos: VPN WireGuard
+Requiere **RouterOS 7.x** en el MikroTik y que sea alcanzable por UDP (IP pública, DDNS o puerto redirigido).
 
-1. VLAN de gestión sobre el puerto indicado (reutiliza una existente con ese VLAN ID).
-2. IP del MikroTik en esa red.
-3. Reglas de firewall: solo el sistema puede llegar a la IP de la OLT, solo a ping y al puerto de gestión.
-4. Masquerade opcional hacia la OLT, para que no necesite ruta de vuelta.
-5. Ping de prueba.
+1. **Agregar el MikroTik** (`POST /gateways`): el sistema genera el par de claves del servidor (la privada queda cifrada y nunca sale por la API) y asigna una red de túnel `/30` (`10.99.x.x`).
+2. **Script VPN** (`POST /gateways/{id}/vpn-script`): pégalo en el MikroTik. Crea su interfaz WireGuard, su IP en el túnel, el servidor como único par permitido y la regla de firewall del puerto UDP. **Imprime la clave pública del MikroTik.**
+3. **Guardar esa clave** (`PUT /gateways/{id}/router-key`, o el campo en la tabla de la web).
+4. **En el servidor**, genera su configuración y levanta el túnel:
+   ```bash
+   umask 077
+   python tools/wg_server_config.py 1 > /etc/wireguard/onugw1.conf
+   systemctl enable --now wg-quick@onugw1
+   ```
+   Esa configuración contiene la clave privada, por eso se lee directo de la base de datos y no pasa por la API. Incluye una ruta por cada OLT asociada al MikroTik: cuando agregues una OLT nueva, vuelve a generarla.
+5. Con la OLT asociada a ese MikroTik, el botón **Script MikroTik** de la OLT ya no pide la IP del servidor: usa la del túnel.
 
-Todo lo que se escribe en el script pasa por validación estricta (IPs reales, nombres sin comillas ni saltos de línea) para que un dato mal escrito no pueda inyectar comandos en el router.
-Aviso: la sintaxis de RouterOS no se ha probado contra un router real; revisa el script y pruébalo primero con un respaldo hecho (`/system backup save`).
+> **LXC en Proxmox:** WireGuard dentro de un contenedor necesita el módulo `wireguard` cargado en el host y el dispositivo `/dev/net/tun` habilitado para el contenedor.
+
+### Qué hacen los scripts
+Solo **agregan** configuración (nunca borran ni modifican lo existente) y se pueden volver a correr sin duplicar. Todo dato que entra al script pasa por validación estricta (IPs reales, nombres sin comillas ni saltos de línea) para que un valor mal escrito no pueda inyectar comandos en el router. **Haz un respaldo (`/system backup save`) antes de aplicarlos y revísalos**: la sintaxis de RouterOS no se ha probado contra un router real.
 
 ## Autorizar una ONU
 
@@ -65,31 +95,17 @@ Lo que sabemos de la TP-Link DS-P7001-08 (por su backup): la VLAN vive en el `on
 (`gem mapping ... vlan N`) y el límite de subida en el `dba-profile` (`type4 max <kbps>`).
 Falta confirmar cómo limitar la bajada.
 
-## Ejecutar en desarrollo
-
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-# Documentación interactiva: http://localhost:8000/docs
-pytest
-```
-
-Configuración por variables de entorno (prefijo `ONU_`), por ejemplo en `.env`:
-
-```
-ONU_DATABASE_URL=postgresql+psycopg://usuario:clave@localhost/onu_auth
-```
-
 ## Completar el adaptador TP-Link
 
 1. Captura la salida de comandos de lectura de tu OLT:
    `python tools/capture_cli.py --host IP --user admin "show version" ...`
 2. Con esas salidas se implementan los métodos marcados `TODO` en `app/adapters/tplink.py`.
 
+Los backups de OLT (`*.cfg`) traen hashes de contraseñas y datos de clientes: están en `.gitignore`, no los subas al repositorio.
+
 ## Pendiente antes de producción
 
-- Autenticación en la API (hoy está abierta).
-- Cifrar las contraseñas de las OLTs (hoy se guardan en texto plano).
-- Migraciones con Alembic.
-- Escaneo periódico automático y panel web.
+- Autenticación en la API (hoy está abierta; no hay usuarios ni tokens).
+- Migraciones con Alembic (hoy las tablas se crean al arrancar).
+- Escaneo periódico automático y pantalla web de autorización de ONUs.
+- Servicio systemd y PostgreSQL para el LXC.

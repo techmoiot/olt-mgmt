@@ -1,3 +1,4 @@
+import ipaddress
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -5,12 +6,13 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import schemas, services
+from . import schemas, services, vpn
 from .adapters import ADAPTERS
 from .adapters.base import AdapterError, InvalidRequest
 from .config import settings
 from .db import Base, engine, get_db
-from .models import AuditLog, Olt, Onu, OnuStatus, SpeedPlan
+from .models import AuditLog, Gateway, Olt, Onu, OnuStatus, SpeedPlan
+from .vault import VaultError, encrypt
 
 Base.metadata.create_all(engine)
 
@@ -50,6 +52,8 @@ def _run(fn, *args, **kwargs):
         raise HTTPException(501, str(exc))
     except AdapterError as exc:
         raise HTTPException(502, str(exc))
+    except VaultError as exc:
+        raise HTTPException(500, str(exc))
 
 
 @app.get("/health")
@@ -66,9 +70,20 @@ def create_olt(body: schemas.OltCreate, db: Session = Depends(get_db)):
         raise HTTPException(400, "Las OLTs mock están deshabilitadas")
     if db.scalar(select(Olt).where(Olt.name == body.name)):
         raise HTTPException(409, f"Ya existe una OLT llamada {body.name!r}")
-    data = body.model_dump()
-    data["port"] = data["port"] or schemas.DEFAULT_PORTS[body.protocol]
-    olt = Olt(**data)
+    if body.gateway_id is not None:
+        if db.get(Gateway, body.gateway_id) is None:
+            raise HTTPException(404, "Gateway (MikroTik/VPN) no encontrado")
+        try:
+            ipaddress.IPv4Address(body.host)
+        except ValueError:
+            raise HTTPException(400, "Con VPN la OLT debe registrarse con su IP (no con un nombre)")
+    data = body.model_dump(exclude={"password", "snmp_read_community", "snmp_write_community"})
+    olt = Olt(
+        **data,
+        password_enc=encrypt(body.password),
+        snmp_read_enc=encrypt(body.snmp_read_community),
+        snmp_write_enc=encrypt(body.snmp_write_community),
+    )
     db.add(olt)
     db.add(AuditLog(action="olt_added", olt_id=None, detail=f"{olt.name} ({olt.vendor}) {olt.host}"))
     db.commit()
@@ -101,12 +116,77 @@ def delete_olt(olt_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
-@app.post("/olts/{olt_id}/mikrotik-script", response_model=schemas.MikrotikScriptOut)
+@app.post("/olts/{olt_id}/mikrotik-script", response_model=schemas.ScriptOut)
 def olt_mikrotik_script(olt_id: int, body: schemas.MikrotikScriptIn, db: Session = Depends(get_db)):
-    """Genera (no ejecuta) el script de RouterOS que conecta el sistema con esta OLT."""
+    """Genera (no ejecuta) el script de RouterOS (VLAN de gestión + firewall) para esta OLT."""
     olt = _olt_or_404(db, olt_id)
     script, notes = _run(services.mikrotik_script, olt, body)
     return {"script": script, "notes": notes}
+
+
+# ---- Gateways: MikroTik + VPN WireGuard -------------------------------------
+def _gateway_or_404(db: Session, gateway_id: int) -> Gateway:
+    gw = db.get(Gateway, gateway_id)
+    if gw is None:
+        raise HTTPException(404, "Gateway no encontrado")
+    return gw
+
+
+@app.post("/gateways", response_model=schemas.GatewayOut, status_code=201)
+def create_gateway(body: schemas.GatewayCreate, db: Session = Depends(get_db)):
+    """Registra un MikroTik y genera el par de claves WireGuard del servidor (la privada queda cifrada)."""
+    if db.scalar(select(Gateway).where(Gateway.name == body.name)):
+        raise HTTPException(409, f"Ya existe un gateway llamado {body.name!r}")
+    used = [g.tunnel_net for g in db.scalars(select(Gateway)).all()]
+
+    def build():
+        net = vpn.parse_tunnel_net(body.tunnel_net, used) if body.tunnel_net else ipaddress.ip_network(vpn.next_free_tunnel_net(used))
+        router_ip, server_ip = vpn.tunnel_ips(net)
+        priv, pub = vpn.generate_keypair()
+        return Gateway(
+            name=body.name, endpoint=body.endpoint, listen_port=body.listen_port, tunnel_net=str(net),
+            router_ip=router_ip, server_ip=server_ip, server_private_enc=encrypt(priv), server_public_key=pub,
+        )
+
+    gw = _run(build)
+    db.add(gw)
+    db.add(AuditLog(action="gateway_added", detail=f"{gw.name} {gw.endpoint}:{gw.listen_port} túnel {gw.tunnel_net}"))
+    db.commit()
+    return gw
+
+
+@app.get("/gateways", response_model=list[schemas.GatewayOut])
+def list_gateways(db: Session = Depends(get_db)):
+    return db.scalars(select(Gateway)).all()
+
+
+@app.post("/gateways/{gateway_id}/vpn-script", response_model=schemas.ScriptOut)
+def gateway_vpn_script(gateway_id: int, body: schemas.VpnScriptIn, db: Session = Depends(get_db)):
+    """Genera (no ejecuta) el script de RouterOS que arma el lado MikroTik de la VPN WireGuard."""
+    gw = _gateway_or_404(db, gateway_id)
+    ip = str(body.server_public_ip) if body.server_public_ip else None
+    script, notes = _run(vpn.generate_vpn_script, gw, ip)
+    return {"script": script, "notes": notes}
+
+
+@app.put("/gateways/{gateway_id}/router-key", response_model=schemas.GatewayOut)
+def set_router_key(gateway_id: int, body: schemas.RouterKeyIn, db: Session = Depends(get_db)):
+    """Guarda la clave pública que imprimió el script en el MikroTik."""
+    gw = _gateway_or_404(db, gateway_id)
+    gw.router_public_key = body.public_key
+    db.add(AuditLog(action="gateway_key_set", detail=gw.name))
+    db.commit()
+    return gw
+
+
+@app.delete("/gateways/{gateway_id}", status_code=204)
+def delete_gateway(gateway_id: int, db: Session = Depends(get_db)):
+    gw = _gateway_or_404(db, gateway_id)
+    if gw.olts:
+        raise HTTPException(409, f"El gateway tiene {len(gw.olts)} OLTs asociadas; cámbialas o elimínalas primero")
+    db.add(AuditLog(action="gateway_removed", detail=gw.name))
+    db.delete(gw)
+    db.commit()
 
 
 @app.get("/olts", response_model=list[schemas.OltOut])

@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 .env
 *.db
+secret.key
 capturas/
 # Backups de OLTs: traen hashes de contraseñas y datos de clientes
 *.cfg

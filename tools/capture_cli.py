@@ -11,10 +11,13 @@ contenga datos sensibles que no quieras compartir).
 """
 import argparse
 import getpass
+import sys
 from pathlib import Path
 
-from app.adapters.base import OltCredentials
-from app.adapters.tplink import TplinkAdapter
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from app.adapters.base import OltCredentials  # noqa: E402
+from app.adapters.tplink import TplinkAdapter  # noqa: E402
 
 
 def main() -> None:

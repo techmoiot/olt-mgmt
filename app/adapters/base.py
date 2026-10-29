@@ -42,10 +42,13 @@ class AuthorizeResult:
 @dataclass
 class OltCredentials:
     host: str
-    port: int
-    protocol: str
+    port: int        # puerto del protocolo CLI elegido (SSH o Telnet)
+    protocol: str    # "ssh" | "telnet"
     username: str
     password: str
+    snmp_port: int = 161
+    snmp_read: str = ""   # comunidad de lectura
+    snmp_write: str = ""  # comunidad de escritura (solo si hace falta cambiar algo por SNMP)
 
 
 class OltAdapter(ABC):

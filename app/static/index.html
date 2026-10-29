@@ -11,93 +11,143 @@
   }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; }
-  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
+  main { max-width: 1020px; margin: 0 auto; padding: 24px 16px 64px; }
   h1 { font-size: 22px; margin: 0 0 4px; }
-  h2 { font-size: 16px; margin: 0 0 12px; }
-  .sub { color: var(--muted); margin: 0 0 20px; }
+  h2 { font-size: 16px; margin: 0 0 4px; }
+  h3 { font-size: 13px; margin: 14px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; grid-column: 1 / -1; }
+  .sub { color: var(--muted); margin: 0 0 14px; font-size: 14px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
-  form { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+  form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
   label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
-  input, select, textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+  label.check { flex-direction: row; align-items: center; gap: 8px; }
+  input, select, textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-width: 0; }
   input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 6px; padding: 6px 11px; cursor: pointer; }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   button.danger { color: var(--bad); }
-  .actions { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .actions { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { font-size: 12px; color: var(--muted); font-weight: 600; }
-  td.row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
   .msg { font-size: 13px; }
   .ok { color: var(--ok); } .bad { color: var(--bad); }
-  textarea { width: 100%; min-height: 280px; font: 12.5px/1.5 ui-monospace, monospace; resize: vertical; }
-  ul.notes { color: var(--muted); font-size: 13px; padding-left: 18px; }
+  textarea.script { width: 100%; min-height: 260px; font: 12.5px/1.5 ui-monospace, monospace; resize: vertical; }
+  code { font: 12.5px ui-monospace, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  ul.notes { color: var(--muted); font-size: 13px; padding-left: 18px; margin: 8px 0 0; }
   .hidden { display: none; }
+  .hint { font-size: 12px; color: var(--muted); }
 </style>
 </head>
 <body>
 <main>
   <h1>OLT Management</h1>
-  <p class="sub">Alta de OLTs, prueba de conexión y script de enlace con el MikroTik.</p>
+  <p class="sub">Registra tus OLTs y, si el servidor no está conectado al MikroTik, enlázalo por VPN.</p>
 
+  <!-- ===== MikroTik / VPN ===== -->
   <section class="card">
-    <h2>Agregar OLT</h2>
+    <h2>1. MikroTik y VPN (opcional)</h2>
+    <p class="sub">Si el servidor está lejos del MikroTik, llega a las OLTs por un túnel WireGuard (requiere RouterOS 7). Si está conectado directo, sáltate este paso.</p>
+    <form id="gw-form">
+      <label>Nombre del MikroTik<input name="name" required pattern="[A-Za-z0-9 _.\-]{1,80}" placeholder="Sede-Norte"></label>
+      <label>IP pública o DDNS del MikroTik<input name="endpoint" required placeholder="mk.midominio.net"></label>
+      <label>Puerto UDP del túnel<input name="listen_port" type="number" min="1024" max="65535" value="13231"></label>
+      <label>Red del túnel (opcional)<input name="tunnel_net" placeholder="se asigna sola: 10.99.x.x/30"></label>
+      <div class="actions"><button class="primary" type="submit">Agregar MikroTik</button><span class="msg" id="gw-msg"></span></div>
+    </form>
+    <table>
+      <thead><tr><th>Nombre</th><th>Endpoint</th><th>Túnel</th><th>Estado de la VPN</th><th></th></tr></thead>
+      <tbody id="gws"></tbody>
+    </table>
+    <p class="sub hidden" id="gw-empty" style="margin-top:10px">Sin MikroTiks registrados.</p>
+  </section>
+
+  <!-- ===== Alta de OLT ===== -->
+  <section class="card">
+    <h2>2. Agregar OLT</h2>
     <form id="add-form">
+      <h3>Equipo</h3>
       <label>Nombre<input name="name" required pattern="[A-Za-z0-9 _.\-]{1,80}" placeholder="OLT-Centro"></label>
       <label>Marca<select name="vendor" id="vendor"></select></label>
       <label>Modelo<input name="model" placeholder="DS-P7001-08"></label>
-      <label>IP de gestión<input name="host" required placeholder="172.20.5.2"></label>
-      <label>Protocolo
-        <select name="protocol" id="protocol"><option>ssh</option><option>telnet</option><option>snmp</option></select>
-      </label>
-      <label>Puerto<input name="port" type="number" min="1" max="65535" id="port" placeholder="22"></label>
+      <label>IP de la OLT<input name="host" required placeholder="172.20.5.2"></label>
+      <label>¿Cómo llega el servidor a la OLT?<select name="gateway_id" id="gw-select"><option value="">Directo (misma red)</option></select></label>
+
+      <h3>Acceso por consola (CLI)</h3>
+      <label>Protocolo principal<select name="cli_protocol"><option>ssh</option><option>telnet</option></select></label>
+      <label>Puerto SSH<input name="ssh_port" type="number" min="1" max="65535" value="22"></label>
+      <label>Puerto Telnet<input name="telnet_port" type="number" min="1" max="65535" value="23"></label>
       <label>Usuario<input name="username" autocomplete="off"></label>
       <label>Contraseña<input name="password" type="password" autocomplete="new-password"></label>
+
+      <h3>SNMP</h3>
+      <label>Puerto SNMP<input name="snmp_port" type="number" min="1" max="65535" value="161"></label>
+      <label>Comunidad de lectura<input name="snmp_read_community" autocomplete="off"></label>
+      <label>Comunidad de escritura<input name="snmp_write_community" type="password" autocomplete="new-password"></label>
+
       <div class="actions">
         <button class="primary" type="submit">Agregar OLT</button>
         <span class="msg" id="add-msg"></span>
+        <span class="hint">Las contraseñas y comunidades se guardan cifradas y nunca se muestran.</span>
       </div>
     </form>
   </section>
 
+  <!-- ===== OLTs registradas ===== -->
   <section class="card">
     <h2>OLTs registradas</h2>
     <table>
-      <thead><tr><th>Nombre</th><th>Marca / modelo</th><th>Acceso</th><th>Estado</th><th></th></tr></thead>
+      <thead><tr><th>Nombre</th><th>Marca / modelo</th><th>Acceso</th><th>Conexión</th><th></th></tr></thead>
       <tbody id="olts"></tbody>
     </table>
-    <p class="sub hidden" id="empty">Todavía no hay OLTs registradas.</p>
+    <p class="sub hidden" id="empty" style="margin-top:10px">Todavía no hay OLTs registradas.</p>
   </section>
 
-  <section class="card hidden" id="mk-card">
-    <h2>Script MikroTik para <span id="mk-olt"></span></h2>
-    <p class="sub">Solo se genera: revísalo y pégalo tú en el router (Terminal). Es seguro volver a correrlo.</p>
-    <form id="mk-form">
-      <label>IP de este sistema (el LXC)<input name="system_ip" required placeholder="192.168.88.50"></label>
+  <!-- ===== Script de la OLT (VLAN + firewall en el MikroTik) ===== -->
+  <section class="card hidden" id="olt-script-card">
+    <h2>Script MikroTik para <span id="olt-script-name"></span></h2>
+    <p class="sub">Crea en el MikroTik la VLAN de gestión de la OLT y deja pasar solo al servidor hacia ella. Solo se genera: revísalo y pégalo tú en el router.</p>
+    <form id="olt-script-form">
+      <label id="system-ip-label">IP de este servidor<input name="system_ip" placeholder="192.168.88.50"></label>
       <label>Puerto del MikroTik hacia la OLT<input name="trunk_interface" required placeholder="ether2"></label>
       <label>VLAN de gestión<input name="vlan_id" type="number" min="1" max="4094" required value="250"></label>
       <label>IP del MikroTik en esa VLAN<input name="gateway_ip" required placeholder="172.20.5.1"></label>
       <label>Prefijo<input name="prefix" type="number" min="8" max="30" required value="28"></label>
       <label>Bridge (solo si usa vlan-filtering)<input name="bridge" placeholder="bridge1"></label>
-      <label style="flex-direction:row;align-items:center;gap:8px">
-        <input type="checkbox" name="masquerade" checked> Masquerade hacia la OLT
-      </label>
-      <div class="actions">
-        <button class="primary" type="submit">Generar script</button>
-        <span class="msg" id="mk-msg"></span>
-      </div>
+      <label class="check"><input type="checkbox" name="masquerade" checked> Masquerade hacia la OLT</label>
+      <div class="actions"><button class="primary" type="submit">Generar script</button><span class="msg" id="olt-script-msg"></span></div>
     </form>
-    <div id="mk-out" class="hidden">
-      <textarea id="mk-script" readonly></textarea>
-      <div class="actions" style="margin-top:8px"><button id="mk-copy" type="button">Copiar</button></div>
-      <ul class="notes" id="mk-notes"></ul>
-    </div>
+  </section>
+
+  <!-- ===== Script VPN del MikroTik ===== -->
+  <section class="card hidden" id="vpn-card">
+    <h2>Script de la VPN para <span id="vpn-name"></span></h2>
+    <p class="sub">Paso a paso: (1) pega este script en el MikroTik, (2) copia la clave pública que imprime, (3) pégala en la tabla de MikroTiks, (4) en el servidor genera su configuración.</p>
+    <form id="vpn-form">
+      <label>IP pública fija del servidor (opcional)<input name="server_public_ip" placeholder="203.0.113.9"></label>
+      <div class="actions"><button class="primary" type="submit">Generar script VPN</button><span class="msg" id="vpn-msg"></span></div>
+    </form>
+  </section>
+
+  <!-- ===== Resultado compartido ===== -->
+  <section class="card hidden" id="out-card">
+    <h2 id="out-title">Script generado</h2>
+    <textarea class="script" id="out-script" readonly></textarea>
+    <div class="actions" style="margin-top:8px"><button id="out-copy" type="button">Copiar</button><span class="msg" id="copy-msg"></span></div>
+    <ul class="notes" id="out-notes"></ul>
   </section>
 </main>
 
 <script>
-const DEFAULT_PORTS = { ssh: 22, telnet: 23, snmp: 161 };
-let currentOlt = null;
+let currentOlt = null, currentGw = null;
+const $ = id => document.getElementById(id);
+
+function el(tag, props = {}, ...kids) {
+  const e = Object.assign(document.createElement(tag), props);
+  e.append(...kids);
+  return e;
+}
+function setMsg(node, text, ok) { node.textContent = text; node.className = "msg " + (ok ? "ok" : "bad"); }
 
 async function api(path, opts = {}) {
   const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
@@ -105,95 +155,170 @@ async function api(path, opts = {}) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const d = data.detail;
-    throw new Error(typeof d === "string" ? d : Array.isArray(d) ? d.map(e => e.loc.slice(1).join(".") + ": " + e.msg).join("; ") : "Error " + res.status);
+    throw new Error(typeof d === "string" ? d
+      : Array.isArray(d) ? d.map(e => e.loc.slice(1).join(".") + ": " + e.msg).join("; ") : "Error " + res.status);
   }
   return data;
 }
 
-function setMsg(el, text, ok) { el.textContent = text; el.className = "msg " + (ok ? "ok" : "bad"); }
+function showOutput(title, r) {
+  $("out-title").textContent = title;
+  $("out-script").value = r.script;
+  const ul = $("out-notes"); ul.replaceChildren();
+  for (const n of r.notes) ul.append(el("li", { textContent: n }));
+  $("out-card").classList.remove("hidden");
+  $("out-card").scrollIntoView({ behavior: "smooth" });
+}
 
-document.getElementById("protocol").addEventListener("change", e => {
-  document.getElementById("port").placeholder = DEFAULT_PORTS[e.target.value];
+$("out-copy").addEventListener("click", async () => {
+  const ta = $("out-script");
+  try { await navigator.clipboard.writeText(ta.value); setMsg($("copy-msg"), "Copiado", true); }
+  catch { ta.select(); document.execCommand("copy"); }
 });
 
+/* ---------- Gateways / VPN ---------- */
+async function loadGateways() {
+  const gws = await api("/gateways");
+  const tbody = $("gws"); tbody.replaceChildren();
+  $("gw-empty").classList.toggle("hidden", gws.length > 0);
+  const sel = $("gw-select"); const keep = sel.value;
+  sel.replaceChildren(new Option("Directo (misma red)", ""));
+  for (const g of gws) sel.add(new Option(`Por VPN vía ${g.name}`, g.id));
+  sel.value = keep;
+
+  for (const g of gws) {
+    const tr = tbody.insertRow();
+    tr.insertCell().textContent = g.name;
+    tr.insertCell().textContent = `${g.endpoint}:${g.listen_port}/udp`;
+    tr.insertCell().textContent = `${g.tunnel_net} (MikroTik ${g.router_ip} · servidor ${g.server_ip})`;
+    const st = tr.insertCell();
+    if (g.vpn_ready) {
+      st.append(el("div", { className: "msg ok", textContent: "Clave del MikroTik registrada" }),
+        el("div", { className: "hint" }, "En el servidor: ", el("code", { textContent: `python tools/wg_server_config.py ${g.id}` })));
+    } else {
+      const input = el("input", { placeholder: "Clave pública que imprime el script", size: 30 });
+      const save = el("button", { textContent: "Guardar clave" });
+      const msg = el("div", { className: "msg" });
+      save.onclick = async () => {
+        try {
+          await api(`/gateways/${g.id}/router-key`, { method: "PUT", body: JSON.stringify({ public_key: input.value.trim() }) });
+          loadGateways();
+        } catch (e) { setMsg(msg, e.message, false); }
+      };
+      st.append(el("div", { className: "msg bad", textContent: "Falta la clave pública del MikroTik" }), input, " ", save, msg);
+    }
+    const act = tr.insertCell(); act.className = "row-actions";
+    const bScript = el("button", { textContent: "Script VPN" });
+    bScript.onclick = () => { currentGw = g; $("vpn-name").textContent = g.name; $("vpn-card").classList.remove("hidden"); $("vpn-card").scrollIntoView({ behavior: "smooth" }); };
+    const bDel = el("button", { textContent: "Eliminar", className: "danger" });
+    bDel.onclick = async () => {
+      if (!confirm(`¿Quitar "${g.name}" del sistema?`)) return;
+      try { await api(`/gateways/${g.id}`, { method: "DELETE" }); loadGateways(); }
+      catch (e) { alert(e.message); }
+    };
+    act.append(bScript, bDel);
+  }
+}
+
+$("gw-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const body = Object.fromEntries(new FormData(e.target));
+  body.listen_port = Number(body.listen_port) || 13231;
+  if (!body.tunnel_net) delete body.tunnel_net;
+  try {
+    await api("/gateways", { method: "POST", body: JSON.stringify(body) });
+    e.target.reset(); $("gw-form").elements.listen_port.value = 13231;
+    setMsg($("gw-msg"), "MikroTik agregado", true); loadGateways();
+  } catch (err) { setMsg($("gw-msg"), err.message, false); }
+});
+
+$("vpn-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const body = Object.fromEntries(new FormData(e.target));
+  if (!body.server_public_ip) delete body.server_public_ip;
+  try {
+    const r = await api(`/gateways/${currentGw.id}/vpn-script`, { method: "POST", body: JSON.stringify(body) });
+    showOutput(`Script VPN: ${currentGw.name}`, r); setMsg($("vpn-msg"), "Script generado", true);
+  } catch (err) { setMsg($("vpn-msg"), err.message, false); }
+});
+
+/* ---------- OLTs ---------- */
 async function loadVendors() {
-  const sel = document.getElementById("vendor");
-  for (const v of await api("/vendors")) sel.add(new Option(v, v));
+  for (const v of await api("/vendors")) $("vendor").add(new Option(v, v));
 }
 
 async function loadOlts() {
-  const tbody = document.getElementById("olts");
-  tbody.replaceChildren();
-  const olts = await api("/olts");
-  document.getElementById("empty").classList.toggle("hidden", olts.length > 0);
+  const tbody = $("olts"); tbody.replaceChildren();
+  const [olts, gws] = [await api("/olts"), await api("/gateways")];
+  const gwName = Object.fromEntries(gws.map(g => [g.id, g.name]));
+  $("empty").classList.toggle("hidden", olts.length > 0);
   for (const o of olts) {
     const tr = tbody.insertRow();
     tr.insertCell().textContent = o.name;
     tr.insertCell().textContent = o.vendor + (o.model ? " " + o.model : "");
-    tr.insertCell().textContent = `${o.protocol}://${o.host}:${o.port}`;
+    const acc = tr.insertCell();
+    acc.append(el("div", { textContent: `${o.host} · ${o.cli_protocol.toUpperCase()} :${o.cli_protocol === "ssh" ? o.ssh_port : o.telnet_port}` }),
+      el("div", { className: "hint", textContent: `SNMP :${o.snmp_port} ${o.has_snmp_read ? "· lectura" : ""} ${o.has_snmp_write ? "· escritura" : ""}` }),
+      el("div", { className: "hint", textContent: o.gateway_id ? `VPN vía ${gwName[o.gateway_id] || "?"}` : "Acceso directo" }));
     const st = tr.insertCell(); st.className = "msg"; st.textContent = "—";
     const act = tr.insertCell(); act.className = "row-actions";
-    const bTest = Object.assign(document.createElement("button"), { textContent: "Probar conexión" });
+
+    const bTest = el("button", { textContent: "Probar conexión" });
     bTest.onclick = async () => {
-      st.textContent = "probando…"; st.className = "msg";
+      st.className = "msg"; st.textContent = "probando…";
       try {
         const r = await api(`/olts/${o.id}/test`, { method: "POST" });
-        setMsg(st, r.reachable === null ? r.detail : r.reachable ? `Responde (${r.latency_ms} ms)` : r.detail, r.reachable !== false);
+        st.replaceChildren(...r.checks.map(c => el("div", {
+          className: "msg " + (c.reachable ? "ok" : c.reachable === false ? "bad" : ""),
+          textContent: `${c.service.toUpperCase()} :${c.port} ${c.reachable ? "responde" + (c.latency_ms != null ? ` (${c.latency_ms} ms)` : "") : c.reachable === false ? "sin respuesta" : "no comprobado"}`,
+        })));
       } catch (e) { setMsg(st, e.message, false); }
     };
-    const bMk = Object.assign(document.createElement("button"), { textContent: "Script MikroTik" });
-    bMk.onclick = () => openMikrotik(o);
-    const bDel = Object.assign(document.createElement("button"), { textContent: "Eliminar", className: "danger" });
+    const bMk = el("button", { textContent: "Script MikroTik" });
+    bMk.onclick = () => openOltScript(o);
+    const bDel = el("button", { textContent: "Eliminar", className: "danger" });
     bDel.onclick = async () => {
       if (!confirm(`¿Quitar "${o.name}" del sistema? No toca la OLT física.`)) return;
-      try { await api(`/olts/${o.id}`, { method: "DELETE" }); loadOlts(); }
+      try { await api(`/olts/${o.id}`, { method: "DELETE" }); loadOlts(); loadGateways(); }
       catch (e) { setMsg(st, e.message, false); }
     };
     act.append(bTest, bMk, bDel);
   }
 }
 
-document.getElementById("add-form").addEventListener("submit", async e => {
+$("add-form").addEventListener("submit", async e => {
   e.preventDefault();
-  const f = new FormData(e.target), msg = document.getElementById("add-msg");
-  const body = Object.fromEntries(f);
-  body.port = body.port ? Number(body.port) : null;
+  const body = Object.fromEntries(new FormData(e.target));
+  for (const k of ["ssh_port", "telnet_port", "snmp_port"]) body[k] = Number(body[k]);
+  body.gateway_id = body.gateway_id ? Number(body.gateway_id) : null;
   try {
     await api("/olts", { method: "POST", body: JSON.stringify(body) });
-    e.target.reset(); setMsg(msg, "OLT agregada", true); loadOlts();
-  } catch (err) { setMsg(msg, err.message, false); }
+    e.target.reset(); setMsg($("add-msg"), "OLT agregada", true); loadOlts(); loadGateways();
+  } catch (err) { setMsg($("add-msg"), err.message, false); }
 });
 
-function openMikrotik(olt) {
+function openOltScript(olt) {
   currentOlt = olt;
-  document.getElementById("mk-olt").textContent = olt.name;
-  document.getElementById("mk-card").classList.remove("hidden");
-  document.getElementById("mk-out").classList.add("hidden");
-  document.getElementById("mk-card").scrollIntoView({ behavior: "smooth" });
+  $("olt-script-name").textContent = olt.name;
+  // Con VPN el origen es la IP del servidor dentro del túnel, no hace falta pedirla.
+  $("system-ip-label").classList.toggle("hidden", !!olt.gateway_id);
+  $("olt-script-card").classList.remove("hidden");
+  $("olt-script-card").scrollIntoView({ behavior: "smooth" });
 }
 
-document.getElementById("mk-form").addEventListener("submit", async e => {
+$("olt-script-form").addEventListener("submit", async e => {
   e.preventDefault();
-  const f = new FormData(e.target), msg = document.getElementById("mk-msg");
-  const body = Object.fromEntries(f);
+  const body = Object.fromEntries(new FormData(e.target));
   body.vlan_id = Number(body.vlan_id); body.prefix = Number(body.prefix);
   body.masquerade = e.target.elements.masquerade.checked;
+  if (!body.system_ip || currentOlt.gateway_id) delete body.system_ip;
   try {
     const r = await api(`/olts/${currentOlt.id}/mikrotik-script`, { method: "POST", body: JSON.stringify(body) });
-    document.getElementById("mk-script").value = r.script;
-    const ul = document.getElementById("mk-notes"); ul.replaceChildren();
-    for (const n of r.notes) ul.append(Object.assign(document.createElement("li"), { textContent: n }));
-    document.getElementById("mk-out").classList.remove("hidden");
-    setMsg(msg, "Script generado", true);
-  } catch (err) { setMsg(msg, err.message, false); }
+    showOutput(`Script de VLAN y firewall: ${currentOlt.name}`, r); setMsg($("olt-script-msg"), "Script generado", true);
+  } catch (err) { setMsg($("olt-script-msg"), err.message, false); }
 });
 
-document.getElementById("mk-copy").addEventListener("click", async () => {
-  const ta = document.getElementById("mk-script");
-  try { await navigator.clipboard.writeText(ta.value); } catch { ta.select(); document.execCommand("copy"); }
-});
-
-loadVendors().then(loadOlts);
+loadVendors().then(() => loadGateways().then(loadOlts));
 </script>
 </body>
 </html>

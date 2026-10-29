@@ -11,6 +11,7 @@ from .adapters import get_adapter
 from .adapters.base import AdapterError, AuthorizeRequest, InvalidRequest, OltAdapter, OltCredentials
 from .mikrotik import MikrotikParams, generate_script
 from .models import AuditLog, Olt, Onu, OnuStatus, SpeedPlan, utcnow
+from .vault import decrypt
 
 # Una sola operación a la vez por OLT: la mayoría no tolera sesiones CLI concurrentes.
 _olt_locks: dict[int, threading.Lock] = defaultdict(threading.Lock)
@@ -19,7 +20,16 @@ _olt_locks: dict[int, threading.Lock] = defaultdict(threading.Lock)
 def adapter_for(olt: Olt) -> OltAdapter:
     return get_adapter(
         olt.vendor,
-        OltCredentials(olt.host, olt.port, olt.protocol, olt.username, olt.password),
+        OltCredentials(
+            host=olt.host,
+            port=olt.cli_port,
+            protocol=olt.cli_protocol,
+            username=olt.username,
+            password=decrypt(olt.password_enc),
+            snmp_port=olt.snmp_port,
+            snmp_read=decrypt(olt.snmp_read_enc),
+            snmp_write=decrypt(olt.snmp_write_enc),
+        ),
     )
 
 
@@ -51,36 +61,61 @@ def scan_olt(db: Session, olt: Olt) -> list[Onu]:
     return pending
 
 
-def check_olt_reachable(olt: Olt, timeout: float = 3.0) -> dict:
-    """Prueba TCP al puerto de gestión. No envía credenciales ni comandos."""
-    if olt.vendor == "mock":
-        return {"reachable": True, "latency_ms": 0.0, "detail": "OLT simulada"}
-    if olt.protocol == "snmp":
-        return {"reachable": None, "detail": "SNMP usa UDP: no se puede comprobar con una conexión TCP"}
+def _tcp_check(service: str, host: str, port: int, timeout: float) -> dict:
     start = time.monotonic()
     try:
-        with socket.create_connection((olt.host, olt.port), timeout=timeout):
+        with socket.create_connection((host, port), timeout=timeout):
             pass
     except OSError as exc:
-        return {"reachable": False, "detail": f"No se pudo conectar a {olt.host}:{olt.port} ({exc})"}
+        return {"service": service, "port": port, "reachable": False,
+                "detail": f"No se pudo conectar a {host}:{port} ({exc})"}
     ms = round((time.monotonic() - start) * 1000, 1)
-    return {"reachable": True, "latency_ms": ms, "detail": f"Puerto {olt.port} abierto en {olt.host}"}
+    return {"service": service, "port": port, "reachable": True, "latency_ms": ms,
+            "detail": f"Puerto {port} abierto"}
+
+
+def check_olt_reachable(olt: Olt, timeout: float = 3.0) -> dict:
+    """Prueba cada servicio de gestión. Solo abre el puerto TCP: no envía credenciales ni comandos."""
+    if olt.vendor == "mock":
+        return {"checks": [
+            {"service": "ssh", "port": olt.ssh_port, "reachable": True, "latency_ms": 0.0, "detail": "OLT simulada"},
+        ]}
+    checks = [
+        _tcp_check("ssh", olt.host, olt.ssh_port, timeout),
+        _tcp_check("telnet", olt.host, olt.telnet_port, timeout),
+        {"service": "snmp", "port": olt.snmp_port, "reachable": None,
+         "detail": "SNMP usa UDP: aún no se comprueba (se verificará al implementar el adaptador)"},
+    ]
+    return {"checks": checks}
 
 
 def mikrotik_script(olt: Olt, body) -> tuple[str, list[str]]:
+    """Script de VLAN + firewall del MikroTik para esta OLT.
+
+    Si la OLT llega por VPN, el origen permitido es la IP del servidor dentro del túnel;
+    si llega directo, se usa la IP del sistema que indicó el usuario.
+    """
+    if olt.gateway is not None:
+        system_ip, via_vpn = olt.gateway.server_ip, True
+    elif body.system_ip is not None:
+        system_ip, via_vpn = str(body.system_ip), False
+    else:
+        raise InvalidRequest("Indica la IP del sistema (esta OLT no está asociada a una VPN/gateway)")
     return generate_script(
         MikrotikParams(
             olt_name=olt.name,
             olt_ip=olt.host,
-            olt_protocol=olt.protocol,
-            olt_port=olt.port,
-            system_ip=str(body.system_ip),
+            cli_protocol=olt.cli_protocol,
+            cli_port=olt.cli_port,
+            snmp_port=olt.snmp_port if olt.has_snmp_read or olt.has_snmp_write else None,
+            system_ip=system_ip,
             trunk_interface=body.trunk_interface,
             vlan_id=body.vlan_id,
             gateway_ip=str(body.gateway_ip),
             prefix=body.prefix,
             bridge=body.bridge,
             masquerade=body.masquerade,
+            via_vpn=via_vpn,
         )
     )
 
