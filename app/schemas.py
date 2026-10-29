@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from .models import OnuStatus
 
@@ -27,15 +27,14 @@ class OltOut(BaseModel):
     protocol: str
 
 
-class ProfileCreate(BaseModel):
+class SpeedPlanCreate(BaseModel):
     name: str
-    line_profile: str
-    service_profile: str = ""
-    vlan: int
+    up_kbps: int = Field(gt=0)
+    down_kbps: int = Field(gt=0)
     description: str = ""
 
 
-class ProfileOut(ProfileCreate):
+class SpeedPlanOut(SpeedPlanCreate):
     model_config = ConfigDict(from_attributes=True)
     id: int
 
@@ -50,14 +49,16 @@ class OnuOut(BaseModel):
     status: OnuStatus
     customer_name: str
     customer_ref: str
-    profile_id: int | None
+    vlan: int | None
+    speed_plan_id: int | None
     rx_power_dbm: str
     first_seen: datetime
     last_seen: datetime
 
 
 class AuthorizeIn(BaseModel):
-    profile_id: int
+    vlan: int = Field(ge=1, le=4094)  # elegida por el usuario entre las VLANs de la OLT
+    speed_plan_id: int                # plan de velocidad (límite en la OLT)
     customer_name: str
     customer_ref: str = ""
     actor: str = "api"

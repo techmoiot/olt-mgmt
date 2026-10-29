@@ -3,10 +3,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import schemas, services
-from .adapters.base import AdapterError
+from .adapters.base import AdapterError, InvalidRequest
 from .config import settings
 from .db import Base, engine, get_db
-from .models import AuditLog, Olt, Onu, OnuStatus, ServiceProfile
+from .models import AuditLog, Olt, Onu, OnuStatus, SpeedPlan
 
 Base.metadata.create_all(engine)
 
@@ -24,6 +24,8 @@ def _run(fn, *args, **kwargs):
     """Traduce errores de OLT a respuestas HTTP claras."""
     try:
         return fn(*args, **kwargs)
+    except InvalidRequest as exc:
+        raise HTTPException(400, str(exc))
     except NotImplementedError as exc:
         raise HTTPException(501, str(exc))
     except AdapterError as exc:
@@ -61,18 +63,29 @@ def scan(olt_id: int, db: Session = Depends(get_db)):
     return _run(services.scan_olt, db, olt)
 
 
-# ---- Perfiles ---------------------------------------------------------------
-@app.post("/profiles", response_model=schemas.ProfileOut, status_code=201)
-def create_profile(body: schemas.ProfileCreate, db: Session = Depends(get_db)):
-    profile = ServiceProfile(**body.model_dump())
-    db.add(profile)
+@app.get("/olts/{olt_id}/vlans", response_model=list[int])
+def olt_vlans(olt_id: int, db: Session = Depends(get_db)):
+    """VLANs disponibles en la OLT, para el selector al autorizar."""
+    olt = db.get(Olt, olt_id)
+    if olt is None:
+        raise HTTPException(404, "OLT no encontrada")
+    return _run(services.olt_vlans, olt)
+
+
+# ---- Planes de velocidad ----------------------------------------------------
+@app.post("/speed-plans", response_model=schemas.SpeedPlanOut, status_code=201)
+def create_speed_plan(body: schemas.SpeedPlanCreate, db: Session = Depends(get_db)):
+    if db.scalar(select(SpeedPlan).where(SpeedPlan.name == body.name)):
+        raise HTTPException(409, f"Ya existe un plan llamado {body.name!r}")
+    plan = SpeedPlan(**body.model_dump())
+    db.add(plan)
     db.commit()
-    return profile
+    return plan
 
 
-@app.get("/profiles", response_model=list[schemas.ProfileOut])
-def list_profiles(db: Session = Depends(get_db)):
-    return db.scalars(select(ServiceProfile)).all()
+@app.get("/speed-plans", response_model=list[schemas.SpeedPlanOut])
+def list_speed_plans(db: Session = Depends(get_db)):
+    return db.scalars(select(SpeedPlan)).all()
 
 
 # ---- ONUs -------------------------------------------------------------------
@@ -89,10 +102,10 @@ def list_onus(status: OnuStatus | None = None, olt_id: int | None = None, db: Se
 @app.post("/onus/{onu_id}/authorize", response_model=schemas.OnuOut)
 def authorize(onu_id: int, body: schemas.AuthorizeIn, db: Session = Depends(get_db)):
     onu = _onu_or_404(db, onu_id)
-    profile = db.get(ServiceProfile, body.profile_id)
-    if profile is None:
-        raise HTTPException(404, "Perfil no encontrado")
-    return _run(services.authorize_onu, db, onu, profile, body.customer_name, body.customer_ref, body.actor)
+    plan = db.get(SpeedPlan, body.speed_plan_id)
+    if plan is None:
+        raise HTTPException(404, "Plan de velocidad no encontrado")
+    return _run(services.authorize_onu, db, onu, body.vlan, plan, body.customer_name, body.customer_ref, body.actor)
 
 
 @app.post("/onus/{onu_id}/suspend", response_model=schemas.OnuOut)

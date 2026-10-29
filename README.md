@@ -23,6 +23,23 @@ API (FastAPI) -> services (locks por OLT, auditoría) -> adaptador por marca -> 
 Cada marca implementa la interfaz de `app/adapters/base.py`
 (`list_unauthorized`, `authorize`, `suspend`, `resume`, `delete`).
 
+## Autorizar una ONU
+
+Al autorizar se elige:
+
+- **VLAN**: `GET /olts/{id}/vlans` devuelve las que existen en la OLT; el sistema rechaza (400) cualquiera que no esté.
+- **Plan de velocidad**: se crean en `POST /speed-plans` (subida/bajada en kbps) y el límite se aplica en la OLT.
+- El **ONU ID** lo asigna el adaptador: primer hueco libre del puerto PON.
+
+```
+POST /onus/{id}/authorize
+{"vlan": 254, "speed_plan_id": 1, "customer_name": "...", "customer_ref": "..."}
+```
+
+Lo que sabemos de la TP-Link DS-P7001-08 (por su backup): la VLAN vive en el `ont-lineprofile`
+(`gem mapping ... vlan N`) y el límite de subida en el `dba-profile` (`type4 max <kbps>`).
+Falta confirmar cómo limitar la bajada.
+
 ## Ejecutar en desarrollo
 
 ```bash

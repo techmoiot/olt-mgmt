@@ -18,14 +18,20 @@ class DiscoveredOnu:
     rx_power_dbm: str = ""
 
 
+class InvalidRequest(Exception):
+    """La petición no es válida (VLAN inexistente, estado incorrecto, etc.)."""
+
+
 @dataclass
 class AuthorizeRequest:
     serial: str
     pon_port: str
-    line_profile: str
-    service_profile: str
     vlan: int
+    up_kbps: int    # límite de subida (en la OLT: DBA profile)
+    down_kbps: int  # límite de bajada
     description: str = ""  # nombre del cliente, se guarda en la OLT si el equipo lo permite
+    # El adaptador resuelve (o crea) el line/service profile que corresponda a vlan + velocidad,
+    # y elige el primer ONU ID libre del puerto.
 
 
 @dataclass
@@ -51,6 +57,10 @@ class OltAdapter(ABC):
     @abstractmethod
     def list_unauthorized(self) -> list[DiscoveredOnu]:
         """ONUs detectadas en los puertos PON que aún no están autorizadas."""
+
+    @abstractmethod
+    def list_vlans(self) -> list[int]:
+        """VLANs que existen en la OLT, para ofrecerlas al autorizar."""
 
     @abstractmethod
     def authorize(self, req: AuthorizeRequest) -> AuthorizeResult:

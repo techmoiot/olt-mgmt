@@ -4,4 +4,7 @@ __pycache__/
 .env
 *.db
 capturas/
+# Backups de OLTs: traen hashes de contraseñas y datos de clientes
+*.cfg
+backups/
 .pytest_cache/

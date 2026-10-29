@@ -36,15 +36,15 @@ class Olt(Base):
     onus: Mapped[list["Onu"]] = relationship(back_populates="olt", cascade="all, delete-orphan")
 
 
-class ServiceProfile(Base):
-    __tablename__ = "service_profiles"
+class SpeedPlan(Base):
+    """Plan de velocidad que se limita a nivel OLT. Valores en kbps (como el DBA de la OLT)."""
+
+    __tablename__ = "speed_plans"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(60), unique=True)
-    # Nombres de los perfiles tal como existen configurados en la OLT.
-    line_profile: Mapped[str] = mapped_column(String(60))
-    service_profile: Mapped[str] = mapped_column(String(60), default="")
-    vlan: Mapped[int] = mapped_column(Integer)
+    name: Mapped[str] = mapped_column(String(60), unique=True)  # ej. "50 Mbps"
+    up_kbps: Mapped[int] = mapped_column(Integer)
+    down_kbps: Mapped[int] = mapped_column(Integer)
     description: Mapped[str] = mapped_column(String(200), default="")
 
 
@@ -60,13 +60,14 @@ class Onu(Base):
     status: Mapped[OnuStatus] = mapped_column(Enum(OnuStatus), default=OnuStatus.PENDING)
     customer_name: Mapped[str] = mapped_column(String(120), default="")
     customer_ref: Mapped[str] = mapped_column(String(60), default="")  # ID en tu facturación
-    profile_id: Mapped[int | None] = mapped_column(ForeignKey("service_profiles.id"), nullable=True)
+    vlan: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    speed_plan_id: Mapped[int | None] = mapped_column(ForeignKey("speed_plans.id"), nullable=True)
     rx_power_dbm: Mapped[str] = mapped_column(String(20), default="")
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     olt: Mapped[Olt] = relationship(back_populates="onus")
-    profile: Mapped[ServiceProfile | None] = relationship()
+    speed_plan: Mapped[SpeedPlan | None] = relationship()
 
 
 class AuditLog(Base):

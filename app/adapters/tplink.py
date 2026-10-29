@@ -61,8 +61,19 @@ class TplinkAdapter(OltAdapter):
         # TODO: ejecutar el comando que lista ONUs sin autorizar y parsear la salida.
         raise NotImplementedError("TP-Link: falta el comando para listar ONUs sin autorizar")
 
+    def list_vlans(self) -> list[int]:
+        # TODO: leer las VLANs de la OLT (el backup muestra bloques `vlan <id>` / `name "..."`).
+        raise NotImplementedError("TP-Link: falta el comando para listar VLANs")
+
     def authorize(self, req: AuthorizeRequest) -> AuthorizeResult:
-        # TODO: secuencia de comandos para autorizar y aplicar perfil/VLAN.
+        # Lo que ya sabemos del backup (por confirmar contra la OLT antes de ejecutar nada):
+        #   interface gpon 1/0/N
+        #     ont add <id> sn-auth <SERIAL> desc "<texto>" ont-lineprofile-id <n> ont-srvprofile-id <n>
+        #   - la VLAN va dentro del ont-lineprofile (gem mapping 1 1 vlan <vlan>)
+        #   - el límite de subida va en el dba-profile (type4 max <kbps>) del line profile
+        #   - el ONU ID lo elegimos nosotros: primer libre del puerto
+        # TODO: resolver/crear el line profile para (vlan, up_kbps), límite de bajada,
+        #       service-port si el puerto no tiene auto-service-port (ej. 1/0/3).
         raise NotImplementedError("TP-Link: falta la secuencia de comandos para autorizar")
 
     def suspend(self, pon_port: str, onu_id: int) -> None:

@@ -6,8 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .adapters import get_adapter
-from .adapters.base import AdapterError, AuthorizeRequest, OltAdapter, OltCredentials
-from .models import AuditLog, Olt, Onu, OnuStatus, ServiceProfile, utcnow
+from .adapters.base import AdapterError, AuthorizeRequest, InvalidRequest, OltAdapter, OltCredentials
+from .models import AuditLog, Olt, Onu, OnuStatus, SpeedPlan, utcnow
 
 # Una sola operación a la vez por OLT: la mayoría no tolera sesiones CLI concurrentes.
 _olt_locks: dict[int, threading.Lock] = defaultdict(threading.Lock)
@@ -48,33 +48,51 @@ def scan_olt(db: Session, olt: Olt) -> list[Onu]:
     return pending
 
 
-def authorize_onu(db: Session, onu: Onu, profile: ServiceProfile, customer_name: str, customer_ref: str, actor: str) -> Onu:
+def olt_vlans(olt: Olt) -> list[int]:
+    with _olt_locks[olt.id]:
+        return sorted(adapter_for(olt).list_vlans())
+
+
+def authorize_onu(db: Session, onu: Onu, vlan: int, plan: SpeedPlan, customer_name: str, customer_ref: str, actor: str) -> Onu:
     if onu.status != OnuStatus.PENDING:
-        raise AdapterError(f"La ONU está en estado {onu.status.value}, solo se autoriza una pendiente")
-    req = AuthorizeRequest(
-        serial=onu.serial,
-        pon_port=onu.pon_port,
-        line_profile=profile.line_profile,
-        service_profile=profile.service_profile,
-        vlan=profile.vlan,
-        description=customer_name,
-    )
+        raise InvalidRequest(f"La ONU está en estado {onu.status.value}, solo se autoriza una pendiente")
+    adapter = adapter_for(onu.olt)
     with _olt_locks[onu.olt_id]:
-        result = adapter_for(onu.olt).authorize(req)
+        # Validar la VLAN contra las que existen en la OLT, si el adaptador sabe listarlas.
+        try:
+            known = adapter.list_vlans()
+        except NotImplementedError:
+            known = None
+        if known is not None and vlan not in known:
+            raise InvalidRequest(f"La VLAN {vlan} no existe en la OLT. Disponibles: {sorted(known)}")
+        result = adapter.authorize(
+            AuthorizeRequest(
+                serial=onu.serial,
+                pon_port=onu.pon_port,
+                vlan=vlan,
+                up_kbps=plan.up_kbps,
+                down_kbps=plan.down_kbps,
+                description=customer_name,
+            )
+        )
 
     onu.onu_id = result.onu_id
     onu.status = OnuStatus.AUTHORIZED
-    onu.profile_id = profile.id
+    onu.vlan = vlan
+    onu.speed_plan_id = plan.id
     onu.customer_name = customer_name
     onu.customer_ref = customer_ref
-    audit(db, "authorized", onu.olt_id, onu.serial, f"cliente={customer_name} perfil={profile.name} onu_id={result.onu_id}", actor)
+    audit(
+        db, "authorized", onu.olt_id, onu.serial,
+        f"cliente={customer_name} vlan={vlan} plan={plan.name} onu_id={result.onu_id}", actor,
+    )
     db.commit()
     return onu
 
 
 def _require_authorized(onu: Onu) -> None:
     if onu.onu_id is None or onu.status not in (OnuStatus.AUTHORIZED, OnuStatus.SUSPENDED):
-        raise AdapterError("La ONU no está autorizada en la OLT")
+        raise InvalidRequest("La ONU no está autorizada en la OLT")
 
 
 def suspend_onu(db: Session, onu: Onu, actor: str = "api") -> Onu:

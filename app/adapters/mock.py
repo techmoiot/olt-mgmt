@@ -12,7 +12,9 @@ _STATE: dict[str, dict] = {}
 
 
 def _state(host: str) -> dict:
-    return _STATE.setdefault(host, {"unauthorized": [], "authorized": {}, "next_id": {}})
+    return _STATE.setdefault(
+        host, {"unauthorized": [], "authorized": {}, "vlans": list(range(249, 259))}
+    )
 
 
 def mock_add_unauthorized(host: str, serial: str, pon_port: str, rx: str = "-20.5") -> None:
@@ -30,15 +32,25 @@ class MockAdapter(OltAdapter):
     def list_unauthorized(self) -> list[DiscoveredOnu]:
         return list(_state(self.creds.host)["unauthorized"])
 
+    def list_vlans(self) -> list[int]:
+        return list(_state(self.creds.host)["vlans"])
+
     def authorize(self, req: AuthorizeRequest) -> AuthorizeResult:
         st = _state(self.creds.host)
         found = [o for o in st["unauthorized"] if o.serial == req.serial]
         if not found:
             raise AdapterError(f"ONU {req.serial} no está en la lista de no autorizadas")
         st["unauthorized"] = [o for o in st["unauthorized"] if o.serial != req.serial]
-        onu_id = st["next_id"].get(req.pon_port, 0) + 1
-        st["next_id"][req.pon_port] = onu_id
-        st["authorized"][(req.pon_port, onu_id)] = {"serial": req.serial, "suspended": False}
+        # Primer ID libre del puerto (igual que hará el adaptador real)
+        used = {oid for (port, oid) in st["authorized"] if port == req.pon_port}
+        onu_id = next(i for i in range(len(used) + 1) if i not in used)
+        st["authorized"][(req.pon_port, onu_id)] = {
+            "serial": req.serial,
+            "suspended": False,
+            "vlan": req.vlan,
+            "up_kbps": req.up_kbps,
+            "down_kbps": req.down_kbps,
+        }
         return AuthorizeResult(onu_id=onu_id)
 
     def _get(self, pon_port: str, onu_id: int) -> dict:
