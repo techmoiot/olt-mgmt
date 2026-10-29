@@ -1,5 +1,7 @@
 """Lógica de negocio: escaneo, autorización y cambios de estado de ONUs."""
+import socket
 import threading
+import time
 from collections import defaultdict
 
 from sqlalchemy import select
@@ -7,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from .adapters import get_adapter
 from .adapters.base import AdapterError, AuthorizeRequest, InvalidRequest, OltAdapter, OltCredentials
+from .mikrotik import MikrotikParams, generate_script
 from .models import AuditLog, Olt, Onu, OnuStatus, SpeedPlan, utcnow
 
 # Una sola operación a la vez por OLT: la mayoría no tolera sesiones CLI concurrentes.
@@ -46,6 +49,40 @@ def scan_olt(db: Session, olt: Olt) -> list[Onu]:
         pending.append(onu)
     db.commit()
     return pending
+
+
+def check_olt_reachable(olt: Olt, timeout: float = 3.0) -> dict:
+    """Prueba TCP al puerto de gestión. No envía credenciales ni comandos."""
+    if olt.vendor == "mock":
+        return {"reachable": True, "latency_ms": 0.0, "detail": "OLT simulada"}
+    if olt.protocol == "snmp":
+        return {"reachable": None, "detail": "SNMP usa UDP: no se puede comprobar con una conexión TCP"}
+    start = time.monotonic()
+    try:
+        with socket.create_connection((olt.host, olt.port), timeout=timeout):
+            pass
+    except OSError as exc:
+        return {"reachable": False, "detail": f"No se pudo conectar a {olt.host}:{olt.port} ({exc})"}
+    ms = round((time.monotonic() - start) * 1000, 1)
+    return {"reachable": True, "latency_ms": ms, "detail": f"Puerto {olt.port} abierto en {olt.host}"}
+
+
+def mikrotik_script(olt: Olt, body) -> tuple[str, list[str]]:
+    return generate_script(
+        MikrotikParams(
+            olt_name=olt.name,
+            olt_ip=olt.host,
+            olt_protocol=olt.protocol,
+            olt_port=olt.port,
+            system_ip=str(body.system_ip),
+            trunk_interface=body.trunk_interface,
+            vlan_id=body.vlan_id,
+            gateway_ip=str(body.gateway_ip),
+            prefix=body.prefix,
+            bridge=body.bridge,
+            masquerade=body.masquerade,
+        )
+    )
 
 
 def olt_vlans(olt: Olt) -> list[int]:

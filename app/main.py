@@ -1,8 +1,12 @@
+from pathlib import Path
+
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import schemas, services
+from .adapters import ADAPTERS
 from .adapters.base import AdapterError, InvalidRequest
 from .config import settings
 from .db import Base, engine, get_db
@@ -11,6 +15,22 @@ from .models import AuditLog, Olt, Onu, OnuStatus, SpeedPlan
 Base.metadata.create_all(engine)
 
 app = FastAPI(title="OLT Management", version="0.1.0")
+
+
+def _vendors() -> list[str]:
+    return [v for v in ADAPTERS if v != "mock" or settings.allow_mock]
+
+
+def _olt_or_404(db: Session, olt_id: int) -> Olt:
+    olt = db.get(Olt, olt_id)
+    if olt is None:
+        raise HTTPException(404, "OLT no encontrada")
+    return olt
+
+
+@app.get("/", include_in_schema=False)
+def ui():
+    return FileResponse(Path(__file__).parent / "static" / "index.html")
 
 
 def _onu_or_404(db: Session, onu_id: int) -> Onu:
@@ -40,14 +60,53 @@ def health():
 # ---- OLTs -------------------------------------------------------------------
 @app.post("/olts", response_model=schemas.OltOut, status_code=201)
 def create_olt(body: schemas.OltCreate, db: Session = Depends(get_db)):
+    if body.vendor not in ADAPTERS:
+        raise HTTPException(400, f"Marca {body.vendor!r} sin adaptador. Disponibles: {', '.join(_vendors())}")
     if body.vendor == "mock" and not settings.allow_mock:
         raise HTTPException(400, "Las OLTs mock están deshabilitadas")
     if db.scalar(select(Olt).where(Olt.name == body.name)):
         raise HTTPException(409, f"Ya existe una OLT llamada {body.name!r}")
-    olt = Olt(**body.model_dump())
+    data = body.model_dump()
+    data["port"] = data["port"] or schemas.DEFAULT_PORTS[body.protocol]
+    olt = Olt(**data)
     db.add(olt)
+    db.add(AuditLog(action="olt_added", olt_id=None, detail=f"{olt.name} ({olt.vendor}) {olt.host}"))
     db.commit()
     return olt
+
+
+@app.get("/vendors", response_model=list[str])
+def vendors():
+    """Marcas con adaptador disponible para el formulario de alta."""
+    return _vendors()
+
+
+@app.post("/olts/{olt_id}/test", response_model=schemas.ReachabilityOut)
+def test_olt(olt_id: int, db: Session = Depends(get_db)):
+    olt = _olt_or_404(db, olt_id)
+    return services.check_olt_reachable(olt)
+
+
+@app.delete("/olts/{olt_id}", status_code=204)
+def delete_olt(olt_id: int, db: Session = Depends(get_db)):
+    """Quita la OLT del sistema. No toca la OLT física."""
+    olt = _olt_or_404(db, olt_id)
+    active = db.scalars(
+        select(Onu).where(Onu.olt_id == olt.id, Onu.status.in_([OnuStatus.AUTHORIZED, OnuStatus.SUSPENDED]))
+    ).all()
+    if active:
+        raise HTTPException(409, f"La OLT tiene {len(active)} ONUs autorizadas registradas; elimínalas primero")
+    db.add(AuditLog(action="olt_removed", olt_id=None, detail=f"{olt.name} {olt.host}"))
+    db.delete(olt)
+    db.commit()
+
+
+@app.post("/olts/{olt_id}/mikrotik-script", response_model=schemas.MikrotikScriptOut)
+def olt_mikrotik_script(olt_id: int, body: schemas.MikrotikScriptIn, db: Session = Depends(get_db)):
+    """Genera (no ejecuta) el script de RouterOS que conecta el sistema con esta OLT."""
+    olt = _olt_or_404(db, olt_id)
+    script, notes = _run(services.mikrotik_script, olt, body)
+    return {"script": script, "notes": notes}
 
 
 @app.get("/olts", response_model=list[schemas.OltOut])

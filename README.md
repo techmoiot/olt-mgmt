@@ -10,7 +10,9 @@ Sistema de autorización y gestión de ONUs para OLTs de varias marcas (TP-Link,
 | Adaptador simulado (`mock`) | Listo, sirve para probar el flujo |
 | Adaptador TP-Link DS-P7001-08 | Conexión SSH lista; comandos pendientes de salidas reales de la CLI |
 | Adaptadores ZTE, VSOL, BTPON | Pendientes |
-| Panel web | Pendiente |
+| Alta de OLTs + prueba de conexión (API y pantalla web) | Listo |
+| Generador de script MikroTik | Listo (sintaxis sin probar en un router real) |
+| Panel web de autorización de ONUs | Pendiente |
 
 ## Arquitectura
 
@@ -22,6 +24,29 @@ API (FastAPI) -> services (locks por OLT, auditoría) -> adaptador por marca -> 
 
 Cada marca implementa la interfaz de `app/adapters/base.py`
 (`list_unauthorized`, `authorize`, `suspend`, `resume`, `delete`).
+
+## Agregar una OLT
+
+Desde la web (`http://servidor:8000/`) o la API:
+
+- `POST /olts`: nombre, marca, IP de gestión, protocolo (ssh/telnet/snmp), puerto (si se omite, el estándar del protocolo) y credenciales. Valida marca, formato de campos y nombres duplicados; la contraseña nunca se devuelve.
+- `POST /olts/{id}/test`: prueba TCP al puerto de gestión. No envía credenciales ni comandos.
+- `DELETE /olts/{id}`: la quita del sistema (no toca la OLT física). Se bloquea si tiene ONUs autorizadas.
+
+## Conectar el sistema con la OLT a través del MikroTik
+
+`POST /olts/{id}/mikrotik-script` (o el botón "Script MikroTik" en la web) **genera** un script de RouterOS; el sistema nunca se conecta al MikroTik ni lo ejecuta. Datos que pide: IP del sistema, puerto del MikroTik hacia la OLT, VLAN de gestión, IP del MikroTik en esa VLAN y prefijo (y el bridge, si usa vlan-filtering).
+
+El script solo **agrega** cosas (nunca borra ni modifica lo existente) y se puede volver a correr sin duplicar:
+
+1. VLAN de gestión sobre el puerto indicado (reutiliza una existente con ese VLAN ID).
+2. IP del MikroTik en esa red.
+3. Reglas de firewall: solo el sistema puede llegar a la IP de la OLT, solo a ping y al puerto de gestión.
+4. Masquerade opcional hacia la OLT, para que no necesite ruta de vuelta.
+5. Ping de prueba.
+
+Todo lo que se escribe en el script pasa por validación estricta (IPs reales, nombres sin comillas ni saltos de línea) para que un dato mal escrito no pueda inyectar comandos en el router.
+Aviso: la sintaxis de RouterOS no se ha probado contra un router real; revisa el script y pruébalo primero con un respaldo hecho (`/system backup save`).
 
 ## Autorizar una ONU
 
