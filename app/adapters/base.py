@@ -30,6 +30,14 @@ class AuthorizeRequest:
     up_kbps: int    # límite de subida (en la OLT: DBA profile)
     down_kbps: int  # límite de bajada
     description: str = ""  # nombre del cliente, se guarda en la OLT si el equipo lo permite
+    # Opcionales: si vienen, el adaptador usa estos perfiles que ya existen en la OLT en lugar de
+    # derivarlos de up_kbps/down_kbps (0 = sin límite).
+    line_profile: str = ""
+    up_profile: str = ""
+    down_profile: str = ""
+    svlan: int | None = None
+    config_type: str = "routing"  # routing | bridge
+    onu_model: str = ""
     # El adaptador resuelve (o crea) el line/service profile que corresponda a vlan + velocidad,
     # y elige el primer ONU ID libre del puerto.
 
@@ -80,6 +88,14 @@ class OltAdapter(ABC):
     @abstractmethod
     def delete(self, pon_port: str, onu_id: int) -> None:
         """Elimina la ONU de la OLT."""
+
+    def list_line_profiles(self) -> list[str]:
+        """Line profiles existentes en la OLT (para el selector). Opcional."""
+        raise NotImplementedError
+
+    def list_speed_profiles(self) -> tuple[list[str], list[str]]:
+        """(perfiles de subida, perfiles de bajada) existentes en la OLT. Opcional."""
+        raise NotImplementedError
 
     def get_rx_power(self, pon_port: str, onu_id: int) -> str:
         """Potencia óptica recibida (dBm). Opcional."""

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ritsuko - Zonas y NAP</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body data-page="zonas" data-title="Zonas y NAP" data-admin="1">
+<main id="main" class="hidden">
+<section class="card">
+  <h2>Zonas</h2>
+  <form id="zone-form">
+    <label>Nombre de la zona<input name="name" required maxlength="80" placeholder="Canajal"></label>
+    <div class="actions"><button class="primary" type="submit">Agregar zona</button><span class="msg" id="zone-msg"></span></div>
+  </form>
+  <div class="table-wrap"><table><thead><tr><th>Zona</th><th></th></tr></thead><tbody id="zones"></tbody></table></div>
+  <p class="sub hidden mt" id="zones-empty">Sin zonas.</p>
+</section>
+<section class="card">
+  <h2>NAP (cajas de distribución)</h2>
+  <form id="nap-form">
+    <label>Nombre del NAP<input name="name" required maxlength="80" placeholder="NAP-01"></label>
+    <label>Zona<select name="zone_id" id="nap-zone"></select></label>
+    <div class="actions"><button class="primary" type="submit">Agregar NAP</button><span class="msg" id="nap-msg"></span></div>
+  </form>
+  <div class="table-wrap"><table><thead><tr><th>NAP</th><th>Zona</th><th></th></tr></thead><tbody id="naps"></tbody></table></div>
+  <p class="sub hidden mt" id="naps-empty">Sin NAPs.</p>
+</section>
+</main>
+<script src="/static/common.js"></script>
+<script src="/static/js/zonas.js"></script>
+</body>
+</html>

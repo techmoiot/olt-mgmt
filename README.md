@@ -13,9 +13,9 @@ Sistema de autorización y gestión de ONUs para OLTs de varias marcas (TP-Link,
 | Adaptador simulado (`mock`) | Listo, sirve para probar el flujo |
 | Adaptador TP-Link DS-P7001-08 | Conexión SSH lista; comandos pendientes de salidas reales de la CLI |
 | Adaptadores ZTE, VSOL, BTPON | Pendientes |
-| Pantalla web: alta de OLTs, MikroTik/VPN, scripts | Listo (`/`) |
 | Login (usuarios, roles admin/operador, sesiones, CSRF) | Listo |
-| Pantalla web de autorización de ONUs | Pendiente |
+| Panel web con menú lateral (una pantalla por tarea) | Listo |
+| Autorizar ONU: VLAN (CVLAN/SVLAN), plan o perfiles de la OLT, Routing/Bridge, cliente, zona y NAP | Listo en el sistema y con OLT simulada; falta el comando real de cada marca |
 
 ## Arquitectura
 
@@ -53,6 +53,25 @@ Instala lo que falte (git, python3-venv), crea el usuario `oltmgmt`, el código 
   Si ya está instalado: `OLT_BIND=0.0.0.0 ritsuko-update`. Basta indicarlo una vez: se guarda en `/etc/olt-mgmt.env` y las actualizaciones lo conservan. Para volver a modo local, `OLT_BIND=127.0.0.1`.
 
 Otras variables opcionales: `OLT_REPO`, `OLT_BRANCH`, `OLT_DIR`, `OLT_DATA`, `OLT_ENV`, `OLT_PORT`, `OLT_CMD` (dónde se crea `ritsuko-update`). Si el repositorio es privado, `raw.githubusercontent.com` y `git clone` necesitan un token o una deploy key.
+
+## Pantallas
+
+Todas viven bajo `/static/*.html` (la raíz `/` es el login). Menú lateral:
+
+| Menú | Qué hace | Quién |
+|---|---|---|
+| Dashboard | ONUs en el sistema, sin autorizar, activas, fuera de línea, baja señal (< -27 dBm), autorizadas hoy/este mes | todos |
+| OLTs / Agregar OLT | lista, probar conexión, buscar ONUs; alta con marca, modelo, versión, tipo de PON, puertos, SNMP y VPN | todos / admin |
+| Sin autorizar | ONUs detectadas; filtrar por OLT; botón *Autorizar* | todos |
+| Autorizar ONU | pestañas *Datos de ONU* y *Datos de cliente* | todos |
+| Autorizadas | suspender, reactivar (todos) y eliminar (admin) | todos |
+| MikroTik y VPN | VPN WireGuard y scripts de RouterOS | admin |
+| Planes de velocidad, Zonas y NAP | catálogos | admin |
+| Usuarios, Auditoría | gestión de accesos y registro de acciones | admin |
+
+Hasta que existan los adaptadores reales, las pantallas funcionan completas con una OLT de marca `mock` (simulada). Los campos *Line profile*, *perfil de subida* y *perfil de bajada* se leen de la OLT; si el adaptador de esa marca aún no sabe leerlos, la pantalla lo avisa y se usa un plan propio.
+
+**Actualizar una instalación anterior:** `ritsuko-update` agrega solas las columnas nuevas a la base existente (solo agrega, nunca borra).
 
 ## Login y usuarios
 
@@ -146,5 +165,5 @@ Los backups de OLT (`*.cfg`) traen hashes de contraseñas y datos de clientes: e
 
 - HTTPS delante de la pantalla web (proxy inverso) y, opcionalmente, 2FA.
 - Migraciones con Alembic (hoy las tablas se crean al arrancar).
-- Escaneo periódico automático y pantalla web de autorización de ONUs.
+- Adaptadores reales (comandos por marca), lectura de estado/señal de las ONUs y escaneo periódico automático.
 - PostgreSQL para producción (hoy se usa SQLite en `/var/lib/olt-mgmt`).

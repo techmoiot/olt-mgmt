@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ritsuko - Planes de velocidad</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body data-page="planes" data-title="Planes de velocidad" data-admin="1">
+<main id="main" class="hidden">
+<section class="card">
+  <p class="sub">Planes propios con límite de subida y bajada. Se aplican en la OLT al autorizar (si prefieres usar perfiles que ya existen en la OLT, los eliges directo en la pantalla de autorizar).</p>
+  <form id="plan-form">
+    <label>Nombre<input name="name" required maxlength="60" placeholder="50 Mbps"></label>
+    <label>Bajada (Mbps)<input name="down" type="number" min="1" step="1" required></label>
+    <label>Subida (Mbps)<input name="up" type="number" min="1" step="1" required></label>
+    <label>Descripción<input name="description" maxlength="200"></label>
+    <div class="actions"><button class="primary" type="submit">Crear plan</button><span class="msg" id="plan-msg"></span></div>
+  </form>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Nombre</th><th>Bajada</th><th>Subida</th><th>Descripción</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+  <p class="sub hidden mt" id="empty">Todavía no hay planes.</p>
+</section>
+</main>
+<script src="/static/common.js"></script>
+<script src="/static/js/planes.js"></script>
+</body>
+</html>

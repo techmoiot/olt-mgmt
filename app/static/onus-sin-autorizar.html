@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ritsuko - ONUs sin autorizar</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body data-page="onus-sin-autorizar" data-title="ONUs sin autorizar">
+<main id="main" class="hidden">
+<section class="card">
+  <div class="filters">
+    <label>OLT<select id="olt-filter"><option value="">Todas las OLTs</option></select></label>
+    <button class="primary" id="btn-scan" type="button">Buscar en la OLT</button>
+    <label>Buscar<input id="search" placeholder="SN, modelo, puerto…"></label>
+    <span class="msg" id="scan-msg"></span>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>OLT</th><th>Interfaz</th><th>SN</th><th>Modelo</th><th>Señal (dBm)</th><th></th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+  <p class="sub hidden mt" id="empty">No hay ONUs pendientes. Pulsa «Buscar en la OLT» para consultar.</p>
+</section>
+</main>
+<script src="/static/common.js"></script>
+<script src="/static/js/onus-sin-autorizar.js"></script>
+</body>
+</html>

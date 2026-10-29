@@ -53,6 +53,13 @@ class MockAdapter(OltAdapter):
         }
         return AuthorizeResult(onu_id=onu_id)
 
+    def list_line_profiles(self) -> list[str]:
+        return ["P4-V1084 - MAPPING MODE vlan", "P4-V1090 - MAPPING MODE vlan"]
+
+    def list_speed_profiles(self) -> tuple[list[str], list[str]]:
+        return (["ADMINOLT_100M_U - SUBIDA", "ADMINOLT_50M_U - SUBIDA"],
+                ["ADMINOLT_100M_D - DESCARGA", "ADMINOLT_50M_D - DESCARGA"])
+
     def _get(self, pon_port: str, onu_id: int) -> dict:
         try:
             return _state(self.creds.host)["authorized"][(pon_port, onu_id)]

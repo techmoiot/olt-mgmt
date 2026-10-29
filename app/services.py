@@ -125,7 +125,9 @@ def olt_vlans(olt: Olt) -> list[int]:
         return sorted(adapter_for(olt).list_vlans())
 
 
-def authorize_onu(db: Session, onu: Onu, vlan: int, plan: SpeedPlan, customer_name: str, customer_ref: str, actor: str) -> Onu:
+def authorize_onu(db: Session, onu: Onu, form, plan: SpeedPlan | None, actor: str) -> Onu:
+    """`form` es un schemas.AuthorizeIn ya validado; `plan` es el plan propio (o None = sin límite / por perfiles)."""
+    vlan = form.vlan
     if onu.status != OnuStatus.PENDING:
         raise InvalidRequest(f"La ONU está en estado {onu.status.value}, solo se autoriza una pendiente")
     adapter = adapter_for(onu.olt)
@@ -142,24 +144,77 @@ def authorize_onu(db: Session, onu: Onu, vlan: int, plan: SpeedPlan, customer_na
                 serial=onu.serial,
                 pon_port=onu.pon_port,
                 vlan=vlan,
-                up_kbps=plan.up_kbps,
-                down_kbps=plan.down_kbps,
-                description=customer_name,
+                up_kbps=plan.up_kbps if plan else 0,
+                down_kbps=plan.down_kbps if plan else 0,
+                description=form.customer_name,
+                line_profile=form.line_profile,
+                up_profile=form.up_profile,
+                down_profile=form.down_profile,
+                svlan=form.svlan,
+                config_type=form.config_type,
+                onu_model=form.onu_model,
             )
         )
 
     onu.onu_id = result.onu_id
     onu.status = OnuStatus.AUTHORIZED
     onu.vlan = vlan
-    onu.speed_plan_id = plan.id
-    onu.customer_name = customer_name
-    onu.customer_ref = customer_ref
+    onu.speed_plan_id = plan.id if plan else None
+    onu.svlan = form.svlan
+    onu.line_profile, onu.up_profile, onu.down_profile = form.line_profile, form.up_profile, form.down_profile
+    onu.config_type, onu.onu_model = form.config_type, form.onu_model
+    onu.customer_name, onu.customer_ref = form.customer_name, form.customer_ref
+    onu.customer_phone, onu.customer_address = form.customer_phone, form.customer_address
+    onu.zone_id, onu.nap_id, onu.comments = form.zone_id, form.nap_id, form.comments
+    limit = plan.name if plan else (f"{form.up_profile}/{form.down_profile}".strip("/") or "sin límite")
     audit(
         db, "authorized", onu.olt_id, onu.serial,
-        f"cliente={customer_name} vlan={vlan} plan={plan.name} onu_id={result.onu_id}", actor,
+        f"cliente={form.customer_name} vlan={vlan} svlan={form.svlan} límite={limit} onu_id={result.onu_id}", actor,
     )
     db.commit()
     return onu
+
+
+def olt_profiles(olt: Olt) -> dict:
+    """Perfiles de línea y de velocidad que ya existen en la OLT, para los selectores."""
+    adapter = adapter_for(olt)
+    with _olt_locks[olt.id]:
+        try:
+            line = adapter.list_line_profiles()
+            up, down = adapter.list_speed_profiles()
+        except NotImplementedError:
+            return {"line_profiles": [], "up_profiles": [], "down_profiles": [], "supported": False}
+    return {"line_profiles": line, "up_profiles": up, "down_profiles": down, "supported": True}
+
+
+LOW_SIGNAL_DBM = -27.0  # por debajo de esto se considera "baja señal"
+
+
+def dashboard_stats(db: Session) -> dict:
+    onus = db.scalars(select(Onu)).all()
+    live = [o for o in onus if o.status != OnuStatus.DELETED]
+    authorized = [o for o in live if o.status in (OnuStatus.AUTHORIZED, OnuStatus.SUSPENDED)]
+
+    def low(o: Onu) -> bool:
+        try:
+            return float(o.rx_power_dbm) < LOW_SIGNAL_DBM
+        except ValueError:
+            return False
+
+    today = utcnow().date()
+    first_auth = [a for a in db.scalars(select(AuditLog).where(AuditLog.action == "authorized")).all()]
+    return {
+        "olts": len(db.scalars(select(Olt)).all()),
+        "onus_total": len(live),
+        "pending": sum(o.status == OnuStatus.PENDING for o in live),
+        "authorized": len(authorized),
+        "suspended": sum(o.status == OnuStatus.SUSPENDED for o in live),
+        "online": sum(o.oper_state == "online" for o in authorized),
+        "offline": sum(o.oper_state == "offline" for o in authorized),
+        "low_signal": sum(low(o) for o in authorized),
+        "authorized_today": sum(a.at.date() == today for a in first_auth),
+        "authorized_month": sum((a.at.year, a.at.month) == (today.year, today.month) for a in first_auth),
+    }
 
 
 def _require_authorized(onu: Onu) -> None:

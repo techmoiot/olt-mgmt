@@ -14,10 +14,12 @@ from .adapters import ADAPTERS
 from .adapters.base import AdapterError, InvalidRequest
 from .config import settings
 from .db import Base, engine, get_db
-from .models import AuditLog, Gateway, Olt, Onu, OnuStatus, SpeedPlan
+from .migrate import add_missing_columns
+from .models import AuditLog, Gateway, Nap, Olt, Onu, OnuStatus, SpeedPlan, Zone
 from .vault import VaultError, encrypt
 
 Base.metadata.create_all(engine)
+add_missing_columns(engine, Base.metadata)  # instalaciones anteriores: agrega las columnas nuevas
 
 app = FastAPI(title="Ritsuko", version="0.1.0")
 # Denegar por defecto: toda ruta que no esté en auth.PUBLIC_PATHS exige sesión.
@@ -219,6 +221,73 @@ def olt_vlans(olt_id: int, db: Session = Depends(get_db)):
     return _run(services.olt_vlans, olt)
 
 
+@app.get("/olts/{olt_id}/profiles", response_model=schemas.OltProfilesOut, dependencies=[Depends(current_user)])
+def olt_profiles(olt_id: int, db: Session = Depends(get_db)):
+    """Line profiles y perfiles de subida/bajada que ya existen en la OLT (selectores al autorizar)."""
+    return _run(services.olt_profiles, _olt_or_404(db, olt_id))
+
+
+# ---- Zonas y NAPs -----------------------------------------------------------
+@app.get("/zones", response_model=list[schemas.ZoneOut], dependencies=[Depends(current_user)])
+def list_zones(db: Session = Depends(get_db)):
+    return db.scalars(select(Zone).order_by(Zone.name)).all()
+
+
+@app.post("/zones", response_model=schemas.ZoneOut, status_code=201, dependencies=[Depends(require_admin)])
+def create_zone(body: schemas.ZoneCreate, db: Session = Depends(get_db)):
+    if db.scalar(select(Zone).where(Zone.name == body.name)):
+        raise HTTPException(409, f"Ya existe la zona {body.name!r}")
+    zone = Zone(name=body.name)
+    db.add(zone)
+    db.commit()
+    return zone
+
+
+@app.delete("/zones/{zone_id}", status_code=204, dependencies=[Depends(require_admin)])
+def delete_zone(zone_id: int, db: Session = Depends(get_db)):
+    zone = db.get(Zone, zone_id)
+    if zone is None:
+        raise HTTPException(404, "Zona no encontrada")
+    if db.scalar(select(Onu.id).where(Onu.zone_id == zone_id).limit(1)) or db.scalar(select(Nap.id).where(Nap.zone_id == zone_id).limit(1)):
+        raise HTTPException(409, "La zona tiene NAPs o clientes asociados")
+    db.delete(zone)
+    db.commit()
+
+
+@app.get("/naps", response_model=list[schemas.NapOut], dependencies=[Depends(current_user)])
+def list_naps(db: Session = Depends(get_db)):
+    return db.scalars(select(Nap).order_by(Nap.name)).all()
+
+
+@app.post("/naps", response_model=schemas.NapOut, status_code=201, dependencies=[Depends(require_admin)])
+def create_nap(body: schemas.NapCreate, db: Session = Depends(get_db)):
+    if db.scalar(select(Nap).where(Nap.name == body.name)):
+        raise HTTPException(409, f"Ya existe el NAP {body.name!r}")
+    if body.zone_id is not None and db.get(Zone, body.zone_id) is None:
+        raise HTTPException(404, "Zona no encontrada")
+    nap = Nap(name=body.name, zone_id=body.zone_id)
+    db.add(nap)
+    db.commit()
+    return nap
+
+
+@app.delete("/naps/{nap_id}", status_code=204, dependencies=[Depends(require_admin)])
+def delete_nap(nap_id: int, db: Session = Depends(get_db)):
+    nap = db.get(Nap, nap_id)
+    if nap is None:
+        raise HTTPException(404, "NAP no encontrado")
+    if db.scalar(select(Onu.id).where(Onu.nap_id == nap_id).limit(1)):
+        raise HTTPException(409, "El NAP tiene clientes asociados")
+    db.delete(nap)
+    db.commit()
+
+
+# ---- Dashboard --------------------------------------------------------------
+@app.get("/dashboard", dependencies=[Depends(current_user)])
+def dashboard(db: Session = Depends(get_db)):
+    return services.dashboard_stats(db)
+
+
 # ---- Planes de velocidad ----------------------------------------------------
 @app.post("/speed-plans", response_model=schemas.SpeedPlanOut, status_code=201, dependencies=[Depends(require_admin)])
 def create_speed_plan(body: schemas.SpeedPlanCreate, db: Session = Depends(get_db)):
@@ -246,13 +315,24 @@ def list_onus(status: OnuStatus | None = None, olt_id: int | None = None, db: Se
     return db.scalars(q).all()
 
 
+@app.get("/onus/{onu_id}", response_model=schemas.OnuOut, dependencies=[Depends(current_user)])
+def get_onu(onu_id: int, db: Session = Depends(get_db)):
+    return _onu_or_404(db, onu_id)
+
+
 @app.post("/onus/{onu_id}/authorize", response_model=schemas.OnuOut, dependencies=[Depends(current_user)])
 def authorize(onu_id: int, body: schemas.AuthorizeIn, db: Session = Depends(get_db), user: AuthUser = Depends(current_user)):
     onu = _onu_or_404(db, onu_id)
-    plan = db.get(SpeedPlan, body.speed_plan_id)
-    if plan is None:
-        raise HTTPException(404, "Plan de velocidad no encontrado")
-    return _run(services.authorize_onu, db, onu, body.vlan, plan, body.customer_name, body.customer_ref, user.username)
+    plan = None
+    if body.speed_plan_id is not None:
+        plan = db.get(SpeedPlan, body.speed_plan_id)
+        if plan is None:
+            raise HTTPException(404, "Plan de velocidad no encontrado")
+    if body.zone_id is not None and db.get(Zone, body.zone_id) is None:
+        raise HTTPException(404, "Zona no encontrada")
+    if body.nap_id is not None and db.get(Nap, body.nap_id) is None:
+        raise HTTPException(404, "NAP no encontrado")
+    return _run(services.authorize_onu, db, onu, body, plan, user.username)
 
 
 @app.post("/onus/{onu_id}/suspend", response_model=schemas.OnuOut, dependencies=[Depends(current_user)])

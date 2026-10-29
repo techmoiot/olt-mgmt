@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ritsuko - MikroTik y VPN</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body data-page="mikrotik" data-title="MikroTik y VPN" data-admin="1">
+<main id="main" class="hidden">
+<section class="card">
+  <h2>1. MikroTik y VPN (opcional)</h2>
+  <p class="sub">Si el servidor está lejos del MikroTik, llega a las OLTs por un túnel WireGuard (requiere RouterOS 7). Si está conectado directo, sáltate este paso.</p>
+  <form id="gw-form">
+    <label>Nombre del MikroTik<input name="name" required pattern="[A-Za-z0-9 _.\-]{1,80}" placeholder="Sede-Norte"></label>
+    <label>IP pública o DDNS del MikroTik<input name="endpoint" required placeholder="mk.midominio.net"></label>
+    <label>Puerto UDP del túnel<input name="listen_port" type="number" min="1024" max="65535" value="13231"></label>
+    <label>Red del túnel (opcional)<input name="tunnel_net" placeholder="se asigna sola: 10.99.x.x/30"></label>
+    <div class="actions"><button class="primary" type="submit">Agregar MikroTik</button><span class="msg" id="gw-msg"></span></div>
+  </form>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Nombre</th><th>Endpoint</th><th>Túnel</th><th>Estado de la VPN</th><th></th></tr></thead>
+    <tbody id="gws"></tbody>
+  </table></div>
+  <p class="sub hidden mt" id="gw-empty">Sin MikroTiks registrados.</p>
+</section>
+
+<section class="card">
+  <h2>2. Script de VLAN y firewall para una OLT</h2>
+  <p class="sub">Crea en el MikroTik la VLAN de gestión de la OLT y deja pasar solo al servidor hacia ella. Solo se genera: revísalo y pégalo tú en el router.</p>
+  <form id="olt-script-form">
+    <label>OLT<select name="olt" id="olt-select" required></select></label>
+    <label id="system-ip-label">IP de este servidor<input name="system_ip" placeholder="192.168.88.50"></label>
+    <label>Puerto del MikroTik hacia la OLT<input name="trunk_interface" required placeholder="ether2"></label>
+    <label>VLAN de gestión<input name="vlan_id" type="number" min="1" max="4094" required value="250"></label>
+    <label>IP del MikroTik en esa VLAN<input name="gateway_ip" required placeholder="172.20.5.1"></label>
+    <label>Prefijo<input name="prefix" type="number" min="8" max="30" required value="28"></label>
+    <label>Bridge (solo si usa vlan-filtering)<input name="bridge" placeholder="bridge1"></label>
+    <label class="check"><input type="checkbox" name="masquerade" checked> Masquerade hacia la OLT</label>
+    <div class="actions"><button class="primary" type="submit">Generar script</button><span class="msg" id="olt-script-msg"></span></div>
+  </form>
+</section>
+
+<section class="card hidden" id="vpn-card">
+  <h2>Script de la VPN para <span id="vpn-name"></span></h2>
+  <p class="sub">Paso a paso: (1) pega este script en el MikroTik, (2) copia la clave pública que imprime, (3) pégala en la tabla de MikroTiks, (4) en el servidor genera su configuración.</p>
+  <form id="vpn-form">
+    <label>IP pública fija del servidor (opcional)<input name="server_public_ip" placeholder="203.0.113.9"></label>
+    <div class="actions"><button class="primary" type="submit">Generar script VPN</button><span class="msg" id="vpn-msg"></span></div>
+  </form>
+</section>
+
+<section class="card hidden" id="out-card">
+  <h2 id="out-title">Script generado</h2>
+  <textarea class="script" id="out-script" readonly></textarea>
+  <div class="actions mt8"><button id="out-copy" type="button">Copiar</button><span class="msg" id="copy-msg"></span></div>
+  <ul class="notes" id="out-notes"></ul>
+</section>
+</main>
+<script src="/static/common.js"></script>
+<script src="/static/js/mikrotik.js"></script>
+</body>
+</html>

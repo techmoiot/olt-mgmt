@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ritsuko - Cambiar contraseña</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="login-wrap">
+  <div class="card">
+    <h2 id="pw-title">Cambiar contraseña</h2>
+    <p class="sub" id="pw-sub"></p>
+    <form id="pw-form">
+      <label>Contraseña actual<input name="current_password" type="password" required autocomplete="current-password"></label>
+      <label>Contraseña nueva<input name="new_password" type="password" required minlength="10" autocomplete="new-password"></label>
+      <label>Repite la nueva<input name="repeat" type="password" required minlength="10" autocomplete="new-password"></label>
+      <div class="actions"><button class="primary" type="submit">Guardar</button><a class="btn hidden" id="pw-cancel" href="/static/dashboard.html">Cancelar</a><span class="msg" id="pw-msg"></span></div>
+    </form>
+  </div>
+</div>
+<script src="/static/common.js"></script>
+<script src="/static/js/cambiar-clave.js"></script>
+</body>
+</html>

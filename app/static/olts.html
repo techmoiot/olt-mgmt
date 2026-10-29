@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ritsuko - OLTs</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body data-page="olts" data-title="OLTs">
+<main id="main" class="hidden">
+<section class="card">
+  <div class="actions"><span class="sub">Equipos registrados. Desde aquí pruebas la conexión y buscas ONUs nuevas.</span><a class="btn primary admin-only" href="/static/olt-nueva.html">Agregar OLT</a></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Nombre</th><th>Equipo</th><th>Acceso</th><th>Conexión</th><th></th></tr></thead>
+    <tbody id="olts"></tbody>
+  </table></div>
+  <p class="sub hidden mt" id="empty">Todavía no hay OLTs registradas.</p>
+</section>
+</main>
+<script src="/static/common.js"></script>
+<script src="/static/js/olts.js"></script>
+</body>
+</html>

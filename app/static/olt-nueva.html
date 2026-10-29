@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ritsuko - Agregar OLT</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body data-page="olt-nueva" data-title="Agregar OLT" data-admin="1">
+<main id="main" class="hidden">
+<section class="card">
+  <form id="add-form">
+    <h3>Equipo</h3>
+    <label>Nombre<input name="name" required pattern="[A-Za-z0-9 _.\-]{1,80}" placeholder="OLT-Centro"></label>
+    <label>Tipo de conexión<select name="gateway_id" id="gw-select"><option value="">Directo (misma red)</option></select></label>
+    <label>IP de la OLT<input name="host" required placeholder="172.20.5.2"></label>
+    <label>Marca<select name="vendor" id="vendor"></select></label>
+    <label>Modelo<input name="model" placeholder="DS-P7001-08"></label>
+    <label>Versión de software<input name="software_version" placeholder="1.0.9 Build 20240425"></label>
+    <label>Tipo de PON<select name="pon_type"><option value="gpon">GPON</option><option value="epon">EPON</option></select></label>
+
+    <h3>Acceso por consola (CLI)</h3>
+    <label>Protocolo principal<select name="cli_protocol"><option>ssh</option><option>telnet</option></select></label>
+    <label>Puerto SSH<input name="ssh_port" type="number" min="1" max="65535" value="22"></label>
+    <label>Puerto Telnet<input name="telnet_port" type="number" min="1" max="65535" value="23"></label>
+    <label>Usuario<input name="username" autocomplete="off"></label>
+    <label>Contraseña<input name="password" type="password" autocomplete="new-password"></label>
+
+    <h3>SNMP</h3>
+    <label>Puerto SNMP<input name="snmp_port" type="number" min="1" max="65535" value="161"></label>
+    <label>Comunidad de lectura<input name="snmp_read_community" autocomplete="off"></label>
+    <label>Comunidad de lectura y escritura<input name="snmp_write_community" type="password" autocomplete="new-password"></label>
+
+    <div class="actions">
+      <button class="primary" type="submit" id="btn-save">Guardar</button>
+      <button type="submit" id="btn-save-test">Guardar y comprobar conexión</button>
+      <a class="btn" href="/static/olts.html">Cancelar</a>
+      <span class="msg" id="add-msg"></span>
+    </div>
+    <p class="hint grid-all">Las contraseñas y comunidades se guardan cifradas y nunca se muestran. Si el servidor no está conectado al MikroTik, primero registra la VPN en «MikroTik y VPN».</p>
+  </form>
+  <div id="test-result" class="mt"></div>
+</section>
+</main>
+<script src="/static/common.js"></script>
+<script src="/static/js/olt-nueva.js"></script>
+</body>
+</html>

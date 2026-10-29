@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ritsuko - Auditoría</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body data-page="auditoria" data-title="Auditoría" data-admin="1">
+<main id="main" class="hidden">
+<section class="card">
+  <div class="filters">
+    <label>Mostrar<select id="limit"><option>100</option><option>300</option><option>1000</option></select></label>
+    <button class="primary" id="btn-go" type="button">Actualizar</button>
+    <label>Buscar<input id="search" placeholder="usuario, acción, SN…"></label>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>OLT</th><th>SN</th><th>Detalle</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+</section>
+</main>
+<script src="/static/common.js"></script>
+<script src="/static/js/auditoria.js"></script>
+</body>
+</html>

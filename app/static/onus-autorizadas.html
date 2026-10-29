@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ritsuko - ONUs autorizadas</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body data-page="onus-autorizadas" data-title="ONUs autorizadas">
+<main id="main" class="hidden">
+<section class="card">
+  <div class="filters">
+    <label>OLT<select id="olt-filter"><option value="">Todas las OLTs</option></select></label>
+    <label>Estado<select id="state-filter"><option value="">Todas</option><option value="authorized">Activas</option><option value="suspended">Suspendidas</option></select></label>
+    <button class="primary" id="btn-go" type="button">Filtrar</button>
+    <label>Buscar<input id="search" placeholder="cliente, SN, VLAN…"></label>
+    <span class="msg" id="msg"></span>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Cliente</th><th>OLT</th><th>SN</th><th>Puerto / ID</th><th>VLAN</th><th>Velocidad</th><th>Señal</th><th>Estado</th><th></th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+  <p class="sub hidden mt" id="empty">No hay ONUs con ese filtro.</p>
+</section>
+</main>
+<script src="/static/common.js"></script>
+<script src="/static/js/onus-autorizadas.js"></script>
+</body>
+</html>

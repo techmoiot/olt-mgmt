@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ritsuko - Autorizar ONU</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body data-page="onu-autorizar" data-title="Autorizar ONU">
+<main id="main" class="hidden">
+<section class="card">
+  <form id="auth-form">
+    <div class="tabs grid-all" id="tabs">
+      <button type="button" class="active" data-tab="t1">Datos de ONU</button>
+      <button type="button" data-tab="t2">Datos de cliente</button>
+    </div>
+
+    <div class="tab-panel active" id="t1">
+      <label>Nombre<input name="customer_name" required maxlength="120" autocomplete="off"></label>
+      <label>OLT<input id="f-olt" readonly></label>
+      <label>SN<input id="f-sn" readonly></label>
+      <label>Interfaz / puerto<input id="f-port" readonly></label>
+      <label>Modelo de ONU<input name="onu_model" list="onu-models" maxlength="60" placeholder="HUAWEI-ONU-WIFI6"></label>
+      <datalist id="onu-models"></datalist>
+      <label>Tipo de configuración<select name="config_type"><option value="routing">Routing</option><option value="bridge">Bridge</option></select></label>
+
+      <h3>Servicio de Internet</h3>
+      <label>VLAN (CVLAN)<select name="vlan" id="f-vlan"></select></label>
+      <label>SVLAN (opcional)<input name="svlan" type="number" min="1" max="4094" placeholder="igual a la CVLAN si se deja vacío"></label>
+
+      <h3>Velocidad</h3>
+      <label class="check grid-all"><input type="checkbox" id="f-limit" checked> Limitar velocidad en la OLT</label>
+      <div id="limit-box" class="grid-all subgrid">
+        <label>Plan de velocidad<select name="speed_plan_id" id="f-plan"></select></label>
+        <label class="check grid-all"><input type="checkbox" id="f-adv"> Usar configuración avanzada (perfiles de la OLT)</label>
+        <div id="adv-box" class="grid-all subgrid hidden">
+          <label>Line profile<select name="line_profile" id="f-line"></select></label>
+          <label>Perfil de bajada<select name="down_profile" id="f-down"></select></label>
+          <label>Perfil de subida<select name="up_profile" id="f-up"></select></label>
+          <p class="hint grid-all" id="adv-note"></p>
+        </div>
+      </div>
+
+      <h3>Ubicación</h3>
+      <label>Zona<select name="zone_id" id="f-zone"></select></label>
+      <label>NAP<select name="nap_id" id="f-nap"></select></label>
+      <label class="grid-all">Comentarios<textarea name="comments" maxlength="500" rows="2"></textarea></label>
+    </div>
+
+    <div class="tab-panel" id="t2">
+      <label>Referencia (ID en tu facturación)<input name="customer_ref" maxlength="60"></label>
+      <label>Teléfono<input name="customer_phone" maxlength="40"></label>
+      <label class="grid-all">Dirección<input name="customer_address" maxlength="200"></label>
+    </div>
+
+    <div class="actions"><button class="primary" type="submit">Autorizar</button><a class="btn" href="/static/onus-sin-autorizar.html">Cancelar</a><span class="msg" id="auth-msg"></span></div>
+  </form>
+</section>
+</main>
+<script src="/static/common.js"></script>
+<script src="/static/js/onu-autorizar.js"></script>
+</body>
+</html>

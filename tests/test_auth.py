@@ -53,7 +53,7 @@ def test_public_pages_and_security_headers():
     assert r.status_code == 200 and "Ritsuko" in r.text
     assert "frame-ancestors 'none'" in r.headers["content-security-policy"]
     assert r.headers["x-frame-options"] == "DENY"
-    assert c.get("/static/app.js").status_code == 200
+    assert c.get("/static/common.js").status_code == 200
     assert "<script>" not in r.text and "style=" not in r.text  # compatible con la CSP (sin código en línea)
 
 

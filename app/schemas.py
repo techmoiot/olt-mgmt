@@ -14,6 +14,8 @@ class OltCreate(BaseModel):
     name: str = Field(pattern=r"^[A-Za-z0-9 _.\-]{1,80}$")
     vendor: str
     model: str = Field("", max_length=60)
+    software_version: str = Field("", max_length=40)
+    pon_type: Literal["gpon", "epon"] = "gpon"
     host: str = Field(pattern=r"^[A-Za-z0-9.\-]{1,253}$")  # IP de gestión de la OLT
     cli_protocol: Literal["ssh", "telnet"] = "ssh"          # con cuál se administra por CLI
     ssh_port: int = Field(22, ge=1, le=65535)
@@ -35,6 +37,8 @@ class OltOut(BaseModel):
     name: str
     vendor: str
     model: str
+    software_version: str
+    pon_type: str
     host: str
     cli_protocol: str
     ssh_port: int
@@ -128,21 +132,75 @@ class OnuOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     olt_id: int
+    olt_name: str
     serial: str
     pon_port: str
     onu_id: int | None
     status: OnuStatus
+    oper_state: str
     customer_name: str
     customer_ref: str
+    customer_phone: str
+    customer_address: str
+    onu_model: str
+    config_type: str
     vlan: int | None
+    svlan: int | None
+    line_profile: str
+    up_profile: str
+    down_profile: str
     speed_plan_id: int | None
+    zone_id: int | None
+    nap_id: int | None
+    comments: str
     rx_power_dbm: str
     first_seen: datetime
     last_seen: datetime
 
 
+_TEXT = r"^[^\x00-\x1f\x7f\"']*$"  # sin comillas ni caracteres de control (van a comandos de la OLT)
+
+
 class AuthorizeIn(BaseModel):
-    vlan: int = Field(ge=1, le=4094)  # elegida por el usuario entre las VLANs de la OLT
-    speed_plan_id: int                # plan de velocidad (límite en la OLT)
-    customer_name: str
-    customer_ref: str = ""
+    """Formulario de autorización. Todo lo que llega aquí termina en comandos de la OLT: se valida estricto."""
+
+    customer_name: str = Field(min_length=1, max_length=120, pattern=_TEXT)
+    customer_ref: str = Field("", max_length=60, pattern=_TEXT)
+    customer_phone: str = Field("", max_length=40, pattern=_TEXT)
+    customer_address: str = Field("", max_length=200, pattern=_TEXT)
+    onu_model: str = Field("", max_length=60, pattern=_TEXT)
+    config_type: Literal["routing", "bridge"] = "routing"
+    vlan: int = Field(ge=1, le=4094)              # CVLAN, entre las VLANs de la OLT
+    svlan: int | None = Field(None, ge=1, le=4094)
+    line_profile: str = Field("", max_length=80, pattern=_TEXT)
+    up_profile: str = Field("", max_length=80, pattern=_TEXT)    # perfil de subida existente en la OLT
+    down_profile: str = Field("", max_length=80, pattern=_TEXT)  # perfil de bajada existente en la OLT
+    speed_plan_id: int | None = None              # plan propio (kbps) si no se eligen perfiles
+    zone_id: int | None = None
+    nap_id: int | None = None
+    comments: str = Field("", max_length=500, pattern=_TEXT)
+
+
+class ZoneCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ _.\-]+$")
+
+
+class ZoneOut(ZoneCreate):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+
+
+class NapCreate(ZoneCreate):
+    zone_id: int | None = None
+
+
+class NapOut(NapCreate):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+
+
+class OltProfilesOut(BaseModel):
+    line_profiles: list[str]
+    up_profiles: list[str]
+    down_profiles: list[str]
+    supported: bool  # False si el adaptador de esa marca aún no sabe leerlos

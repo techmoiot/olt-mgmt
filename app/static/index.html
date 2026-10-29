@@ -7,8 +7,7 @@
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-<!-- ===== Login ===== -->
-<div class="login-wrap hidden" id="view-login">
+<div class="login-wrap">
   <div class="card">
     <h1>Ritsuko</h1>
     <p class="sub">Inicia sesión para continuar.</p>
@@ -19,138 +18,7 @@
     </form>
   </div>
 </div>
-
-<!-- ===== Cambio de contraseña ===== -->
-<div class="login-wrap hidden" id="view-password">
-  <div class="card">
-    <h2 id="pw-title">Cambiar contraseña</h2>
-    <p class="sub" id="pw-sub"></p>
-    <form id="pw-form">
-      <label>Contraseña actual<input name="current_password" type="password" required autocomplete="current-password"></label>
-      <label>Contraseña nueva<input name="new_password" type="password" required minlength="10" autocomplete="new-password"></label>
-      <label>Repite la nueva<input name="repeat" type="password" required minlength="10" autocomplete="new-password"></label>
-      <div class="actions"><button class="primary" type="submit">Guardar</button><button type="button" id="pw-cancel" class="hidden">Cancelar</button><span class="msg" id="pw-msg"></span></div>
-    </form>
-  </div>
-</div>
-
-<!-- ===== Aplicación ===== -->
-<main class="hidden" id="view-app">
-  <div class="topbar">
-    <div><h1>Ritsuko</h1>
-    <p class="sub">Registra tus OLTs y, si el servidor no está conectado al MikroTik, enlázalo por VPN.</p></div>
-    <div class="who"><span id="who-name"></span><span class="badge" id="who-role"></span><button id="btn-pw" type="button">Cambiar contraseña</button><button id="btn-logout" type="button">Salir</button></div>
-  </div>
-
-  <!-- ===== MikroTik / VPN ===== -->
-  <section class="card admin-only">
-    <h2>1. MikroTik y VPN (opcional)</h2>
-    <p class="sub">Si el servidor está lejos del MikroTik, llega a las OLTs por un túnel WireGuard (requiere RouterOS 7). Si está conectado directo, sáltate este paso.</p>
-    <form id="gw-form">
-      <label>Nombre del MikroTik<input name="name" required pattern="[A-Za-z0-9 _.\-]{1,80}" placeholder="Sede-Norte"></label>
-      <label>IP pública o DDNS del MikroTik<input name="endpoint" required placeholder="mk.midominio.net"></label>
-      <label>Puerto UDP del túnel<input name="listen_port" type="number" min="1024" max="65535" value="13231"></label>
-      <label>Red del túnel (opcional)<input name="tunnel_net" placeholder="se asigna sola: 10.99.x.x/30"></label>
-      <div class="actions"><button class="primary" type="submit">Agregar MikroTik</button><span class="msg" id="gw-msg"></span></div>
-    </form>
-    <table>
-      <thead><tr><th>Nombre</th><th>Endpoint</th><th>Túnel</th><th>Estado de la VPN</th><th></th></tr></thead>
-      <tbody id="gws"></tbody>
-    </table>
-    <p class="sub hidden mt" id="gw-empty">Sin MikroTiks registrados.</p>
-  </section>
-
-  <!-- ===== Alta de OLT ===== -->
-  <section class="card admin-only">
-    <h2>2. Agregar OLT</h2>
-    <form id="add-form">
-      <h3>Equipo</h3>
-      <label>Nombre<input name="name" required pattern="[A-Za-z0-9 _.\-]{1,80}" placeholder="OLT-Centro"></label>
-      <label>Marca<select name="vendor" id="vendor"></select></label>
-      <label>Modelo<input name="model" placeholder="DS-P7001-08"></label>
-      <label>IP de la OLT<input name="host" required placeholder="172.20.5.2"></label>
-      <label>¿Cómo llega el servidor a la OLT?<select name="gateway_id" id="gw-select"><option value="">Directo (misma red)</option></select></label>
-
-      <h3>Acceso por consola (CLI)</h3>
-      <label>Protocolo principal<select name="cli_protocol"><option>ssh</option><option>telnet</option></select></label>
-      <label>Puerto SSH<input name="ssh_port" type="number" min="1" max="65535" value="22"></label>
-      <label>Puerto Telnet<input name="telnet_port" type="number" min="1" max="65535" value="23"></label>
-      <label>Usuario<input name="username" autocomplete="off"></label>
-      <label>Contraseña<input name="password" type="password" autocomplete="new-password"></label>
-
-      <h3>SNMP</h3>
-      <label>Puerto SNMP<input name="snmp_port" type="number" min="1" max="65535" value="161"></label>
-      <label>Comunidad de lectura<input name="snmp_read_community" autocomplete="off"></label>
-      <label>Comunidad de escritura<input name="snmp_write_community" type="password" autocomplete="new-password"></label>
-
-      <div class="actions">
-        <button class="primary" type="submit">Agregar OLT</button>
-        <span class="msg" id="add-msg"></span>
-        <span class="hint">Las contraseñas y comunidades se guardan cifradas y nunca se muestran.</span>
-      </div>
-    </form>
-  </section>
-
-  <!-- ===== OLTs registradas ===== -->
-  <section class="card">
-    <h2>OLTs registradas</h2>
-    <table>
-      <thead><tr><th>Nombre</th><th>Marca / modelo</th><th>Acceso</th><th>Conexión</th><th></th></tr></thead>
-      <tbody id="olts"></tbody>
-    </table>
-    <p class="sub hidden mt" id="empty">Todavía no hay OLTs registradas.</p>
-  </section>
-
-  <!-- ===== Script de la OLT (VLAN + firewall en el MikroTik) ===== -->
-  <section class="card hidden admin-only" id="olt-script-card">
-    <h2>Script MikroTik para <span id="olt-script-name"></span></h2>
-    <p class="sub">Crea en el MikroTik la VLAN de gestión de la OLT y deja pasar solo al servidor hacia ella. Solo se genera: revísalo y pégalo tú en el router.</p>
-    <form id="olt-script-form">
-      <label id="system-ip-label">IP de este servidor<input name="system_ip" placeholder="192.168.88.50"></label>
-      <label>Puerto del MikroTik hacia la OLT<input name="trunk_interface" required placeholder="ether2"></label>
-      <label>VLAN de gestión<input name="vlan_id" type="number" min="1" max="4094" required value="250"></label>
-      <label>IP del MikroTik en esa VLAN<input name="gateway_ip" required placeholder="172.20.5.1"></label>
-      <label>Prefijo<input name="prefix" type="number" min="8" max="30" required value="28"></label>
-      <label>Bridge (solo si usa vlan-filtering)<input name="bridge" placeholder="bridge1"></label>
-      <label class="check"><input type="checkbox" name="masquerade" checked> Masquerade hacia la OLT</label>
-      <div class="actions"><button class="primary" type="submit">Generar script</button><span class="msg" id="olt-script-msg"></span></div>
-    </form>
-  </section>
-
-  <!-- ===== Script VPN del MikroTik ===== -->
-  <section class="card hidden admin-only" id="vpn-card">
-    <h2>Script de la VPN para <span id="vpn-name"></span></h2>
-    <p class="sub">Paso a paso: (1) pega este script en el MikroTik, (2) copia la clave pública que imprime, (3) pégala en la tabla de MikroTiks, (4) en el servidor genera su configuración.</p>
-    <form id="vpn-form">
-      <label>IP pública fija del servidor (opcional)<input name="server_public_ip" placeholder="203.0.113.9"></label>
-      <div class="actions"><button class="primary" type="submit">Generar script VPN</button><span class="msg" id="vpn-msg"></span></div>
-    </form>
-  </section>
-
-  <!-- ===== Resultado compartido ===== -->
-  <section class="card hidden" id="out-card">
-    <h2 id="out-title">Script generado</h2>
-    <textarea class="script" id="out-script" readonly></textarea>
-    <div class="actions mt8"><button id="out-copy" type="button">Copiar</button><span class="msg" id="copy-msg"></span></div>
-    <ul class="notes" id="out-notes"></ul>
-  </section>
-
-  <!-- ===== Usuarios (admin) ===== -->
-  <section class="card admin-only">
-    <h2>Usuarios</h2>
-    <p class="sub">Quién puede entrar. El operador autoriza y suspende ONUs; solo el administrador gestiona OLTs, MikroTik, planes y usuarios.</p>
-    <form id="user-form">
-      <label>Usuario<input name="username" required pattern="[a-z0-9._-]{3,32}" autocomplete="off" placeholder="juan"></label>
-      <label>Contraseña inicial<input name="password" type="password" required minlength="10" autocomplete="new-password"></label>
-      <label>Rol<select name="role"><option value="operator">Operador</option><option value="admin">Administrador</option></select></label>
-      <div class="actions"><button class="primary" type="submit">Crear usuario</button><span class="msg" id="user-msg"></span><span class="hint">Mínimo 10 caracteres. Tendrá que cambiarla al primer ingreso.</span></div>
-    </form>
-    <table>
-      <thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Último ingreso</th><th></th></tr></thead>
-      <tbody id="users"></tbody>
-    </table>
-  </section>
-</main>
-<script src="/static/app.js"></script>
+<script src="/static/common.js"></script>
+<script src="/static/js/login.js"></script>
 </body>
 </html>

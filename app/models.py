@@ -49,6 +49,8 @@ class Olt(Base):
     name: Mapped[str] = mapped_column(String(80), unique=True)
     vendor: Mapped[str] = mapped_column(String(30))  # tplink | zte | vsol | btpon | mock
     model: Mapped[str] = mapped_column(String(60), default="")
+    software_version: Mapped[str] = mapped_column(String(40), default="")
+    pon_type: Mapped[str] = mapped_column(String(10), default="gpon")  # gpon | epon
     host: Mapped[str] = mapped_column(String(253))   # IP de gestión de la OLT
     cli_protocol: Mapped[str] = mapped_column(String(10), default="ssh")  # ssh | telnet
     ssh_port: Mapped[int] = mapped_column(Integer, default=22)
@@ -90,6 +92,25 @@ class SpeedPlan(Base):
     description: Mapped[str] = mapped_column(String(200), default="")
 
 
+class Zone(Base):
+    """Zona geográfica (colonia, aldea…) para organizar clientes."""
+
+    __tablename__ = "zones"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(80), unique=True)
+
+
+class Nap(Base):
+    """Caja de distribución de fibra (NAP) de la que cuelga el cliente."""
+
+    __tablename__ = "naps"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(80), unique=True)
+    zone_id: Mapped[int | None] = mapped_column(ForeignKey("zones.id"), nullable=True)
+
+
 class Onu(Base):
     __tablename__ = "onus"
     __table_args__ = (UniqueConstraint("olt_id", "serial", name="uq_olt_serial"),)
@@ -105,11 +126,31 @@ class Onu(Base):
     vlan: Mapped[int | None] = mapped_column(Integer, nullable=True)
     speed_plan_id: Mapped[int | None] = mapped_column(ForeignKey("speed_plans.id"), nullable=True)
     rx_power_dbm: Mapped[str] = mapped_column(String(20), default="")
+    oper_state: Mapped[str] = mapped_column(String(10), default="")  # online | offline | "" (sin dato)
+    # Datos de la ONU y del servicio (como en el formulario de autorización)
+    onu_model: Mapped[str] = mapped_column(String(60), default="")
+    config_type: Mapped[str] = mapped_column(String(10), default="routing")  # routing | bridge
+    line_profile: Mapped[str] = mapped_column(String(80), default="")
+    up_profile: Mapped[str] = mapped_column(String(80), default="")
+    down_profile: Mapped[str] = mapped_column(String(80), default="")
+    svlan: Mapped[int | None] = mapped_column(Integer, nullable=True)  # vlan = CVLAN
+    # Datos del cliente
+    customer_phone: Mapped[str] = mapped_column(String(40), default="")
+    customer_address: Mapped[str] = mapped_column(String(200), default="")
+    zone_id: Mapped[int | None] = mapped_column(ForeignKey("zones.id"), nullable=True)
+    nap_id: Mapped[int | None] = mapped_column(ForeignKey("naps.id"), nullable=True)
+    comments: Mapped[str] = mapped_column(String(500), default="")
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     olt: Mapped[Olt] = relationship(back_populates="onus")
     speed_plan: Mapped[SpeedPlan | None] = relationship()
+    zone: Mapped["Zone | None"] = relationship()
+    nap: Mapped["Nap | None"] = relationship()
+
+    @property
+    def olt_name(self) -> str:
+        return self.olt.name if self.olt else ""
 
 
 class AuditLog(Base):
