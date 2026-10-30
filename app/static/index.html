@@ -6,17 +6,36 @@
 <title>Ritsuko</title>
 <link rel="stylesheet" href="/static/app.css">
 </head>
-<body>
-<div class="login-wrap">
-  <div class="card">
-    <h1>Ritsuko</h1>
-    <p class="sub">Inicia sesión para continuar.</p>
-    <form id="login-form">
-      <label>Usuario<input name="username" required autocomplete="username" autocapitalize="none" spellcheck="false"></label>
-      <label>Contraseña<input name="password" type="password" required autocomplete="current-password"></label>
-      <div class="actions"><button class="primary" type="submit">Entrar</button><span class="msg" id="login-msg"></span></div>
-    </form>
-  </div>
+<body class="auth">
+<div class="auth-shell">
+  <section class="auth-art" aria-hidden="true">
+    <svg class="strands" viewBox="0 0 800 900" preserveAspectRatio="xMidYMid slice" fill="none">
+      <g stroke="#2fc4c0" stroke-linecap="round">
+        <path d="M-40 620 C 200 560, 330 700, 560 520 S 760 360, 860 380" stroke-opacity=".55" stroke-width="2"/>
+        <path d="M-40 660 C 220 610, 340 740, 580 570 S 780 420, 860 440" stroke-opacity=".35" stroke-width="2"/>
+        <path d="M-40 700 C 240 660, 350 780, 600 620 S 800 480, 860 500" stroke-opacity=".2" stroke-width="2"/>
+        <path d="M-40 580 C 180 500, 320 640, 540 470 S 740 300, 860 320" stroke-opacity=".8" stroke-width="1.5"/>
+      </g>
+      <g fill="#2fc4c0">
+        <circle cx="560" cy="520" r="5"/><circle cx="560" cy="520" r="14" fill-opacity=".18"/>
+        <circle cx="330" cy="700" r="3.5" fill-opacity=".8"/><circle cx="700" cy="395" r="3.5" fill-opacity=".8"/>
+        <circle cx="440" cy="560" r="3" fill-opacity=".6"/>
+      </g>
+    </svg>
+    <h2>Altas de ONUs sin pelear con la consola</h2>
+    <p>Autoriza, limita y suspende desde un solo lugar, en cualquiera de tus OLTs.</p>
+  </section>
+  <section class="auth-form">
+    <div>
+      <div class="wordmark" id="wordmark">Ritsuko</div>
+      <p class="sub">Inicia sesión para continuar.</p>
+      <form id="login-form">
+        <label>Usuario<input name="username" required autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+        <label>Contraseña<input name="password" type="password" required autocomplete="current-password"></label>
+        <div class="actions"><button class="primary" type="submit">Entrar</button><span class="msg" id="login-msg"></span></div>
+      </form>
+    </div>
+  </section>
 </div>
 <script src="/static/common.js"></script>
 <script src="/static/js/login.js"></script>

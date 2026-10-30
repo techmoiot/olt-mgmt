@@ -1,5 +1,6 @@
 (async function () {
   const { $, api, setMsg } = R;
+  $("wordmark").prepend(R.logo(30));
   // Si ya hay una sesión válida, directo al panel.
   try {
     const me = await (await fetch("/auth/me", { credentials: "same-origin" })).json();

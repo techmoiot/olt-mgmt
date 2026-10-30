@@ -10,9 +10,9 @@ R.ready.then(async () => {
     R.table($("rows"), onus, $("empty"), (tr, o) => {
       tr.insertCell().textContent = o.olt_name;
       tr.insertCell().textContent = o.pon_port;
-      tr.insertCell().textContent = o.serial;
+      const sn = tr.insertCell(); sn.className = "sn"; sn.textContent = o.serial;
       tr.insertCell().textContent = o.onu_model || "—";
-      tr.insertCell().textContent = o.rx_power_dbm || "—";
+      tr.insertCell().append(R.signal(o.rx_power_dbm));
       tr.insertCell().append(el("a", { className: "btn primary", href: `/static/onu-autorizar.html?id=${o.id}`, textContent: "Autorizar" }));
     });
   }
