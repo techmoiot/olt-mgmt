@@ -1,6 +1,32 @@
 R.ready.then(async () => {
   const { $, el, api, setMsg } = R;
-  for (const v of await api("/vendors")) $("vendor").add(new Option(v, v));
+  // Marca -> modelos. «Otro» permite escribir un modelo que no esté en la lista.
+  const catalog = await api("/catalog");
+  $("vendor").add(new Option("Selecciona una marca", ""));
+  for (const c of catalog) $("vendor").add(new Option(c.label, c.vendor));
+  const OTHER = "__otro__";
+  function syncModels() {
+    const c = catalog.find(x => x.vendor === $("vendor").value);
+    const sel = $("model-select"); sel.replaceChildren();
+    sel.disabled = !c;
+    if (c) {
+      for (const m of c.models) sel.add(new Option(m, m));
+      sel.add(new Option(c.models.length ? "Otro modelo…" : "Escribir modelo…", OTHER));
+    }
+    const note = $("vendor-note");
+    note.classList.toggle("hidden", !c || c.implemented);
+    note.textContent = c && !c.implemented ? `${c.label}: puedes registrar la OLT y generar sus scripts de MikroTik, pero autorizar ONUs en esta marca funcionará cuando esté lista su integración.` : "";
+    syncOther();
+  }
+  function syncOther() {
+    const other = $("model-select").value === OTHER;
+    $("model-other-label").classList.toggle("hidden", !other);
+    $("model-text").required = other;
+    if (!other) $("model-text").value = $("model-select").value;
+  }
+  $("vendor").addEventListener("change", syncModels);
+  $("model-select").addEventListener("change", syncOther);
+  syncModels();
   const gws = await api("/gateways");
   for (const g of gws) $("gw-select").add(new Option(`Por VPN vía ${g.name}`, g.id));
 
@@ -12,6 +38,7 @@ R.ready.then(async () => {
     e.preventDefault();
     const test = wantTest; wantTest = false;
     const body = Object.fromEntries(new FormData(e.target));
+    body.model = $("model-select").value === OTHER ? $("model-text").value.trim() : $("model-select").value;
     for (const k of ["ssh_port", "telnet_port", "snmp_port"]) body[k] = Number(body[k]);
     body.gateway_id = body.gateway_id ? Number(body.gateway_id) : null;
     try {

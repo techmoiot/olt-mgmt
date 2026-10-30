@@ -14,8 +14,10 @@
     <label>Nombre<input name="name" required pattern="[A-Za-z0-9 _.\-]{1,80}" placeholder="OLT-Centro"></label>
     <label>Tipo de conexión<select name="gateway_id" id="gw-select"><option value="">Directo (misma red)</option></select></label>
     <label>IP de la OLT<input name="host" required placeholder="172.20.5.2"></label>
-    <label>Marca<select name="vendor" id="vendor"></select></label>
-    <label>Modelo<input name="model" placeholder="DS-P7001-08"></label>
+    <label>Marca<select name="vendor" id="vendor" required></select></label>
+    <label>Modelo<select id="model-select"></select></label>
+    <label id="model-other-label" class="hidden">Otro modelo<input name="model" id="model-text" maxlength="60" placeholder="Escribe el modelo"></label>
+    <p class="hint grid-all hidden" id="vendor-note"></p>
     <label>Versión de software<input name="software_version" placeholder="1.0.9 Build 20240425"></label>
     <label>Tipo de PON<select name="pon_type"><option value="gpon">GPON</option><option value="epon">EPON</option></select></label>
 

@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from . import auth, schemas, services, vpn
 from .auth import AuthUser, current_user, require_admin
 from .auth_routes import router as auth_router
-from .adapters import ADAPTERS
+from .adapters import ADAPTERS, IMPLEMENTED
+from .catalog import CATALOG
 from .adapters.base import AdapterError, InvalidRequest
 from .config import settings
 from .db import Base, engine, get_db
@@ -104,6 +105,16 @@ def create_olt(body: schemas.OltCreate, db: Session = Depends(get_db)):
 def vendors():
     """Marcas con adaptador disponible para el formulario de alta."""
     return _vendors()
+
+
+@app.get("/catalog", dependencies=[Depends(current_user)])
+def catalog():
+    """Marcas (con sus modelos) para el formulario de alta. `implemented` = ya se pueden operar."""
+    return [
+        {"vendor": v, "label": CATALOG.get(v, {}).get("label", v), "models": CATALOG.get(v, {}).get("models", []),
+         "implemented": v in IMPLEMENTED}
+        for v in sorted(_vendors(), key=lambda x: (x == "mock", x))  # la simulada al final
+    ]
 
 
 @app.post("/olts/{olt_id}/test", response_model=schemas.ReachabilityOut, dependencies=[Depends(require_admin)])

@@ -107,3 +107,20 @@ def test_dashboard_counts():
     assert d["pending"] == 0 and d["authorized"] == 1 and d["authorized_today"] == 1 and d["authorized_month"] == 1
     client.post(f"/onus/{onu['id']}/suspend")
     assert client.get("/dashboard").json()["suspended"] == 1
+
+
+# ---- Catálogo de marcas y modelos ------------------------------------------
+def test_catalog_lists_brands_with_models_and_implementation_state():
+    cat = {c["vendor"]: c for c in client.get("/catalog").json()}
+    assert {"tplink", "zte", "vsol", "btpon", "huawei"} <= set(cat)
+    assert "DS-P7001-08" in cat["tplink"]["models"] and cat["tplink"]["implemented"] is True
+    assert cat["huawei"]["implemented"] is False and cat["btpon"]["models"] == []
+
+
+def test_every_catalog_brand_can_be_registered_and_unimplemented_ones_answer_501():
+    for i, v in enumerate(("zte", "vsol", "btpon", "huawei")):
+        r = client.post("/olts", json={"name": f"o-{v}", "vendor": v, "model": "X", "host": f"10.1.0.{i + 1}"})
+        assert r.status_code == 201, (v, r.text)
+        scan = client.post(f"/olts/{r.json()['id']}/scan")
+        assert scan.status_code == 501 and "aún no está implementado" in scan.json()["detail"]
+    assert client.post("/olts", json={"name": "raro", "vendor": "marcax", "host": "10.1.0.9"}).status_code == 400
